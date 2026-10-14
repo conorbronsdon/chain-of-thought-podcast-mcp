@@ -4,7 +4,7 @@ This read-only Model Context Protocol server lets AI agents and coding assistant
 
 ## Endpoint
 
-`https://mcp.chainofthought.show/mcp` is **not deployed yet (pending review)**. The transport is stateless Streamable HTTP. `GET /` describes the server and `GET /health` returns `ok`.
+`https://mcp.chainofthought.show/mcp` is **not deployed yet (pending deploy)**. The transport is stateless Streamable HTTP. `GET /` describes the server and `GET /health` returns `ok`.
 
 ## Tools
 
