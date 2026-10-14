@@ -1,0 +1,48 @@
+{
+  "name": "chain-of-thought-podcast",
+  "version": "0.1.0",
+  "description": "Search and cite interviews with AI practitioners from the Chain of Thought podcast archive.",
+  "author": {
+    "name": "Conor Bronsdon",
+    "url": "https://chainofthought.show"
+  },
+  "license": "MIT",
+  "homepage": "https://chainofthought.show/for-agents/",
+  "repository": "https://github.com/conorbronsdon/chain-of-thought-podcast-mcp",
+  "keywords": [
+    "podcast",
+    "AI",
+    "engineering",
+    "transcripts",
+    "research",
+    "citations"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Chain of Thought Podcast",
+    "shortDescription": "Search and cite AI interviews",
+    "longDescription": "Find what AI engineers, researchers, and founders said on Chain of Thought, hosted by Conor Bronsdon. Search episode metadata and transcript passages, open episode details, and read nearby transcript excerpts. Compare guests' views with links to the episode pages and timestamped passages. The public archive needs no account or API key and offers read-only access. Transcripts are machine-generated and may contain errors; verify exact quotations against the recording. The tools return bounded excerpts, not whole transcripts or downloadable audio and video.",
+    "developerName": "Chain of Thought",
+    "category": "Education & Research",
+    "capabilities": [
+      "Search transcript passages",
+      "Find episodes by topic or guest",
+      "Read episode details",
+      "Read transcript excerpts",
+      "Cite episode pages"
+    ],
+    "websiteURL": "https://chainofthought.show",
+    "supportURL": "https://github.com/conorbronsdon/chain-of-thought-podcast-mcp/issues",
+    "privacyPolicyURL": "https://chainofthought.show/for-agents/#privacy",
+    "termsOfServiceURL": "https://chainofthought.show/for-agents/#terms",
+    "defaultPrompt": [
+      "What have AI engineers on Chain of Thought said about running evals in production? Cite the episodes.",
+      "Find Chain of Thought episodes about AI agents and summarize the guests' views with links.",
+      "What did guests on Chain of Thought say about inference costs? Quote briefly and cite the passages."
+    ],
+    "brandColor": "#a8202f",
+    "composerIcon": "./assets/mark.svg",
+    "logo": "./assets/logo.svg"
+  }
+}

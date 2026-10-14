@@ -195,3 +195,20 @@ it("reuses normalized tool results from the Workers cache without D1 reads", asy
     shim.close();
   }
 });
+
+it("serves the OpenAI domain-challenge token only when it is configured", async () => {
+  const shim = new D1Shim();
+  const env = envFor(shim);
+  const ctx = fakeExecutionContext();
+  const challenge = "https://mcp.example.com/.well-known/openai-apps-challenge";
+  const unset = await worker.fetch(new Request(challenge), env, ctx);
+  expect(unset.status).toBe(404);
+  const configured = { ...env, OPENAI_APPS_CHALLENGE: " token-123 \n" } as Env;
+  const response = await worker.fetch(new Request(challenge), configured, ctx);
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("token-123");
+  const post = await worker.fetch(new Request(challenge, { method: "POST" }), configured, ctx);
+  expect(post.status).toBe(404);
+  expect(shim.preparedSql).toHaveLength(0);
+  shim.close();
+});

@@ -89,6 +89,14 @@ export default {
       if (url.pathname === "/health" && request.method === "GET") {
         return new Response("ok", { headers: plain });
       }
+      // OpenAI app-directory domain challenge. The portal shows a one-time token;
+      // set it with `wrangler secret put OPENAI_APPS_CHALLENGE`. Unset means 404.
+      if (url.pathname === "/.well-known/openai-apps-challenge"
+        && (request.method === "GET" || request.method === "HEAD")) {
+        const token = (env as Env & { OPENAI_APPS_CHALLENGE?: string }).OPENAI_APPS_CHALLENGE?.trim();
+        if (!token) return new Response("Not found", { status: 404, headers: plain });
+        return new Response(request.method === "HEAD" ? null : token, { headers: plain });
+      }
       if (url.pathname === "/mcp") {
         const bounded = request.method === "POST" ? await boundedMcpRequest(request) : request;
         if (bounded instanceof Response) return bounded;

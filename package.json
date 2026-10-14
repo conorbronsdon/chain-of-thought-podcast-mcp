@@ -21,7 +21,9 @@
     "dev:fixture": "wrangler dev --local --persist-to .wrangler/fixture --port 8787",
     "db:fixture": "wrangler d1 execute cot-archive --local --persist-to .wrangler/fixture --file dist/fixture.sql --yes",
     "dev:full": "wrangler dev --local --persist-to .wrangler/full --port 8787",
-    "db:full": "wrangler d1 execute cot-archive --local --persist-to .wrangler/full --file dist/ingest.sql --yes"
+    "db:full": "wrangler d1 execute cot-archive --local --persist-to .wrangler/full --file dist/ingest.sql --yes",
+    "validate:openai": "node scripts/validate-openai-plugin.mjs",
+    "package:openai": "node scripts/package-openai-plugin.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

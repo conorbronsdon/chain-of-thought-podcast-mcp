@@ -1,0 +1,20 @@
+{
+  "name": "chain-of-thought-podcast-mcp",
+  "interface": {
+    "displayName": "Chain of Thought Podcast"
+  },
+  "plugins": [
+    {
+      "name": "chain-of-thought-podcast",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Education & Research"
+    }
+  ]
+}
