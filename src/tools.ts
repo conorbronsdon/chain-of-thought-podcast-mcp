@@ -50,6 +50,10 @@ type SegmentRow = {
 };
 
 const noWords = "The query has no searchable words. Use plain words, names or numbers.";
+// Episode metadata is curated and spells names correctly when ASR passages do not.
+// A passage is more likely to answer the query when its episode title, guests,
+// chapters or summary also match.
+const EPISODE_MATCH_WEIGHT = 0.4;
 const guests = (json: string): Guest[] => JSON.parse(json) as Guest[];
 const chapters = (json: string): Chapter[] => JSON.parse(json) as Chapter[];
 const range = (episode: number): [number, number] => [
@@ -62,37 +66,50 @@ export async function searchTranscripts(db: D1Database, input: SearchInput) {
   const q = buildFtsQuery(input.query);
   if (!q) throw new ToolInputError(noWords);
 
-  // FTS supplies relevance scores; snippet is used only for long source segments.
+  // Fetch extra candidates so repeated passages do not exhaust the result limit.
   const find = async (match: string): Promise<TranscriptRow[]> => {
     const sql = `
+      WITH ep AS (
+        SELECT rowid AS episode, bm25(episodes_fts, 8.0, 6.0, 3.0, 1.0) AS escore
+        FROM episodes_fts WHERE episodes_fts MATCH ?
+      )
       SELECT s.id, s.episode, s.idx, s.time, s.seconds, s.speaker, s.url,
         CASE WHEN length(s.text) <= 600 THEN s.text
           ELSE snippet(segments_fts, 0, '', '', '…', 64) END AS snippet,
-        bm25(segments_fts, 1.0, 0.25) AS score,
+        bm25(segments_fts, 1.0, 0.25)
+          + ${EPISODE_MATCH_WEIGHT} * coalesce(ep.escore, 0) AS score,
         e.title, e.canonical_url, e.guests_json, e.published_at
       FROM segments_fts
       JOIN segments s ON s.id = segments_fts.rowid
       JOIN episodes e ON e.episode = s.episode
+      LEFT JOIN ep ON ep.episode = s.episode
       WHERE segments_fts MATCH ?
         ${input.episode === undefined ? "" : "AND segments_fts.rowid BETWEEN ? AND ?"}
       ORDER BY score LIMIT ?`;
-    const args: (string | number)[] = [match];
+    const args: (string | number)[] = [q.any, match];
     if (input.episode !== undefined) args.push(...range(input.episode));
-    args.push(input.limit);
+    args.push(Math.min(input.limit * 3, 60));
     return (await db.prepare(sql).bind(...args).all<TranscriptRow>()).results;
   };
 
   const all = await find(q.all);
-  const seen = new Set(all.map(row => row.id));
-  const rows = all.map(row => ({ r: row, match: "all_terms" }));
-  // A single term has the same all and any query, so no fill query is needed.
-  if (q.terms.length > 1 && rows.length < input.limit) {
-    for (const row of await find(q.any)) {
-      if (seen.has(row.id)) continue;
-      rows.push({ r: row, match: "some_terms" });
-      seen.add(row.id);
+  const seenUrls = new Set<string>();
+  const seenPassages = new Set<string>();
+  const rows: { r: TranscriptRow; match: "all_terms" | "some_terms" }[] = [];
+  const add = (candidates: TranscriptRow[], match: "all_terms" | "some_terms") => {
+    for (const row of candidates) {
+      const key = fold(row.snippet).replace(/[^\p{L}\p{N}]/gu, "").slice(0, 80);
+      if (seenUrls.has(row.url) || seenPassages.has(key)) continue;
+      rows.push({ r: row, match });
+      seenUrls.add(row.url);
+      seenPassages.add(key);
       if (rows.length >= input.limit) break;
     }
+  };
+  add(all, "all_terms");
+  // A single term has the same all and any query, so no fill query is needed.
+  if (q.all !== q.any && rows.length < input.limit) {
+    add(await find(q.any), "some_terms");
   }
 
   const results = rows.map(({ r, match }) => ({
@@ -247,14 +264,14 @@ export async function getEpisode(
   };
 }
 
-// Returns bounded context around an index or the last timestamp at or before a time.
+// Returns bounded context around an index, passage anchor or timestamp.
 export async function getTranscriptExcerpt(
   db: D1Database,
   input: { episode: number; at?: string; before: number; after: number },
 ) {
   const parsed = parseAt(input.at);
-  if (!parsed || !Number.isSafeInteger(parsed.value)) {
-    throw new ToolInputError("Use a segment index, #t-N, t-N, m:ss or h:mm:ss for at.");
+  if (!parsed || (typeof parsed.value === "number" && !Number.isSafeInteger(parsed.value))) {
+    throw new ToolInputError("Use a segment index, passage URL or #t- anchor, m:ss or h:mm:ss for at.");
   }
   const ep = await db.prepare(`
     SELECT episode, title, canonical_url, segment_count
@@ -270,9 +287,22 @@ export async function getTranscriptExcerpt(
     throw new ToolInputError(`Episode ${input.episode} has no transcript segments.`);
   }
 
-  let anchor = parsed.value;
+  let anchor = parsed.kind === "anchor" ? 0 : parsed.value;
   const [lo, hi] = range(input.episode);
-  if (parsed.kind === "seconds") {
+  if (parsed.kind === "anchor") {
+    const hash = parsed.value.lastIndexOf("#");
+    const base = parsed.value.startsWith("https://") ? parsed.value.slice(0, hash) : null;
+    if (base !== null && base !== ep.canonical_url) {
+      throw new ToolInputError(`The passage URL does not belong to episode ${input.episode}.`);
+    }
+    const fragment = hash >= 0 ? parsed.value.slice(hash) : `#${parsed.value}`;
+    anchor = (await db.prepare(`
+      SELECT idx FROM segments WHERE id BETWEEN ? AND ? AND url = ?
+    `).bind(lo, hi, `${ep.canonical_url}${fragment}`).first<{ idx: number }>())?.idx ?? -1;
+    if (anchor < 0) {
+      throw new ToolInputError(`No segment with anchor ${fragment} in episode ${input.episode}.`);
+    }
+  } else if (parsed.kind === "seconds") {
     anchor = (await db.prepare(`
       SELECT idx FROM segments
       WHERE id BETWEEN ? AND ? AND seconds IS NOT NULL AND seconds <= ?

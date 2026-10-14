@@ -1,13 +1,17 @@
 import type { Guest } from "./types.ts";
 
-// Parses an excerpt anchor as a segment index or elapsed seconds.
-export function parseAt(at?: string): {
-  kind: "index" | "seconds";
-  value: number;
-} | null {
+// Keeps passage anchors separate from segment indexes; their numbers can differ.
+export function parseAt(at?: string):
+  | { kind: "index" | "seconds"; value: number }
+  | { kind: "anchor"; value: string }
+  | null {
   if (at === undefined) return { kind: "index", value: 0 };
-  const idx = /^(?:#?t-)?(\d+)$/u.exec(at);
+  const idx = /^(\d+)$/u.exec(at);
   if (idx) return { kind: "index", value: Number(idx[1]) };
+  if (/^#?t-\d+(?:-\d+)?$/u.test(at)) return { kind: "anchor", value: at };
+  if (/^https:\/\/chainofthought\.show\/podcast\/[a-z0-9-]+\/#t-\d+(?:-\d+)?$/u.test(at)) {
+    return { kind: "anchor", value: at };
+  }
   const hms = /^(\d+):(\d{2}):(\d{2})$/u.exec(at);
   if (hms && Number(hms[2]) < 60 && Number(hms[3]) < 60) {
     const seconds = Number(hms[1]) * 3600 + Number(hms[2]) * 60 + Number(hms[3]);

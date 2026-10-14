@@ -42,8 +42,7 @@ function assertSearchCites(value: Record<string, unknown> | null) {
   expect(Array.isArray(results)).toBe(true);
   for (const result of results) {
     expect(result.cite).toBe(`Chain of Thought, chainofthought.show — ${result.url}`);
-    expect(result.url.startsWith(episodes.get(result.episode)!.canonicalUrl)).toBe(true);
-    expect(result.url.endsWith(`#t-${result.segment_index}`)).toBe(true);
+    expect(result.url.startsWith(`${episodes.get(result.episode)!.canonicalUrl}#t-`)).toBe(true);
   }
 }
 
@@ -106,6 +105,12 @@ describe("live MCP fixture", () => {
     expect(search.error).toBe(false);
     assertSearchCites(search.value);
     expect((search.value?.results as { url: string }[])[0].url).toBe(target.url);
+    const hit = (search.value?.results as {
+      episode: number; segment_index: number; url: string;
+    }[])[0];
+    const byUrl = await call("get_transcript_excerpt", { episode: hit.episode, at: hit.url });
+    expect(byUrl.error).toBe(false);
+    expect(byUrl.value?.anchor).toMatchObject({ segment_index: hit.segment_index });
 
     const episodeTwoQuery = (ep2.transcript[0].text.match(/[\p{L}\p{N}\p{Co}]+/gu)
       ?? []).slice(0, 5).join("-");

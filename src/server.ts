@@ -28,8 +28,8 @@ export const getEpisodeSchema = z.object({
 
 export const getExcerptSchema = z.object({
   episode: z.number().int().min(1).max(9999).describe("Episode number."),
-  at: z.string().max(20).optional()
-    .describe("Segment index, #t-N, t-N, m:ss or h:mm:ss."),
+  at: z.string().max(300).optional()
+    .describe("Segment index from search results, passage URL or #t- anchor, m:ss or h:mm:ss."),
   before: z.number().int().min(0).max(5).default(2)
     .describe("Segments before the anchor, 0 to 5."),
   after: z.number().int().min(0).max(10).default(5)
@@ -75,7 +75,8 @@ const descriptions = {
   ].join(" "),
   getTranscriptExcerpt: [
     "Returns up to 16 consecutive transcript segments from one episode around a",
-    "timestamp (m:ss or h:mm:ss) or a segment index (the N in a #t-N url).",
+    "timestamp (m:ss or h:mm:ss), a segment_index from search results, or a",
+    "passage url or its #t- anchor.",
     "Defaults: 2 segments before and 5 after. Each segment has its own url to cite.",
   ].join(" "),
 };

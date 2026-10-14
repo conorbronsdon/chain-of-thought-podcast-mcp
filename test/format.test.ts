@@ -8,13 +8,18 @@ it("parses indexes and clock times", () => {
     ["75:10", "seconds", 4510],
     ["1:02:03", "seconds", 3723],
     ["95", "index", 95],
-    ["#t-95", "index", 95],
-    ["t-95", "index", 95],
+    ["#t-95", "anchor", "#t-95"],
+    ["t-95", "anchor", "t-95"],
+    ["#t-2-1", "anchor", "#t-2-1"],
+    ["t-2-1", "anchor", "t-2-1"],
+    ["https://chainofthought.show/podcast/example/#t-2-1", "anchor",
+      "https://chainofthought.show/podcast/example/#t-2-1"],
   ] as const;
   for (const [at, kind, value] of cases) {
     expect(parseAt(at)).toEqual({ kind, value });
   }
-  for (const at of ["12:3", "1:60", "abc", "-1"]) {
+  for (const at of ["12:3", "1:60", "abc", "-1", "#t-1-2-3",
+    "https://elsewhere.test/podcast/example/#t-2"]) {
     expect(parseAt(at)).toBeNull();
   }
 });

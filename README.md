@@ -13,7 +13,11 @@ This read-only Model Context Protocol server lets AI agents and coding assistant
 | `search_transcripts` | `query` (up to 200 characters), `limit` (1–20, default 8), optional `episode` (1–9999) | Ranked passages with episode, guests, speaker, timestamp, snippet, moment URL and citation. |
 | `search_episodes` | `query` (up to 200 characters), `limit` (1–20, default 8) | Ranked episodes with date, guests, summary, matching chapters, URL and citation. |
 | `get_episode` | `episode` (1–9999) or `slug` (up to 300 characters, including a full episode URL) | Metadata, guests, chapters and episode, YouTube and audio links. |
-| `get_transcript_excerpt` | `episode` (1–9999), optional `at` (segment index, `#t-N`, `t-N`, `m:ss` or `h:mm:ss`), `before` (0–5, default 2), `after` (0–10, default 5) | Up to 16 consecutive segments with individual URLs, plus anchor and pagination flags. |
+| `get_transcript_excerpt` | `episode` (1–9999), optional `at` (a `segment_index` from search results, a passage URL or its `#t-` anchor, `m:ss` or `h:mm:ss`), `before` (0–5, default 2), `after` (0–10, default 5) | Up to 16 consecutive segments with individual URLs, plus anchor and pagination flags. |
+
+### How search ranks results
+
+Transcript search uses BM25 over passages, with a boost for passages from episodes whose title, guests, chapter titles or summary match the query. Passages containing all query words come before passages containing some. Near-identical passages, such as sponsor reads repeated across episodes, collapse to one result.
 
 A `search_transcripts` result has this shape (text values abbreviated):
 
@@ -83,7 +87,7 @@ The source corpus states:
 >
 > Redistribution: "This endpoint grants no additional licence to redistribute transcript text as a dataset or corpus. Link to and cite the episode page."
 
-`url` is the page to cite; for a transcript passage it includes `#t-N` to open that segment. `episode_url` is the episode page without a segment anchor. `cite` combines attribution and `url` in the format `Chain of Thought, chainofthought.show — <url>`.
+`url` is the page to cite; for a transcript passage it includes a `#t-` anchor to open that segment. The anchor may have one or two numbers and is separate from `segment_index`. Pass the full URL or its anchor to `get_transcript_excerpt` to retrieve that passage. `episode_url` is the episode page without a segment anchor. `cite` combines attribution and `url` in the format `Chain of Thought, chainofthought.show — <url>`.
 
 ## Limits and freshness
 
@@ -117,6 +121,7 @@ npm run build-sql
 npm run db:full
 npm run dev:full
 npm run query -- --top 3 --compact search_transcripts '{"query":"..."}'
+npm run eval
 ```
 
 To test the cron locally, start `wrangler dev --test-scheduled` and call:
