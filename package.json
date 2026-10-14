@@ -1,0 +1,28 @@
+{
+  "name": "chain-of-thought-podcast-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only remote MCP server for searching and citing the Chain of Thought podcast archive (chainofthought.show).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.24.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@types/node": "24.19.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2",
+    "wrangler": "4.144.0"
+  }
+}
