@@ -98,7 +98,9 @@ The source corpus states:
 >
 > Transcripts: "Machine-generated (ASR), with entity corrections applied during sync. Transcripts may contain errors; verify quotations against the recording."
 >
-> Redistribution: "This endpoint grants no additional licence to redistribute transcript text as a dataset or corpus. Link to and cite the episode page."
+> License: "CC-BY-4.0"
+>
+> Redistribution: "Transcript text and episode metadata are licensed CC BY 4.0 and published as a dataset at https://huggingface.co/datasets/conorbronsdon/chain-of-thought-podcast-transcripts. Credit Chain of Thought (chainofthought.show) and link the episode page."
 
 `url` is the page to cite; for a transcript passage it includes a `#t-` anchor to open that segment. The anchor may have one or two numbers and is separate from `segment_index`. Pass the full URL or its anchor to `get_transcript_excerpt` to retrieve that passage. `episode_url` is the episode page without a segment anchor. `cite` combines attribution and `url` in the format `Chain of Thought, chainofthought.show — <url>`.
 
