@@ -100,6 +100,8 @@ The source corpus states:
 >
 > License: "CC-BY-4.0"
 >
+> Audio: "Episode audio and video are not licensed: all rights reserved. The audio and video URLs are links only; link to the episode page instead of copying the media."
+>
 > Redistribution: "Transcript text and episode metadata are licensed CC BY 4.0 and published as a dataset at https://huggingface.co/datasets/conorbronsdon/chain-of-thought-podcast-transcripts. Credit Chain of Thought (chainofthought.show) and link the episode page."
 
 `url` is the page to cite; for a transcript passage it includes a `#t-` anchor to open that segment. The anchor may have one or two numbers and is separate from `segment_index`. Pass the full URL or its anchor to `get_transcript_excerpt` to retrieve that passage. `episode_url` is the episode page without a segment anchor. `cite` combines attribution and `url` in the format `Chain of Thought, chainofthought.show — <url>`.
