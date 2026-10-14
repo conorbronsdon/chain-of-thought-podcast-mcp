@@ -34,9 +34,9 @@ These steps are for Conor. Nothing here has been run yet. Run them in order.
 
    Expect 77 episodes and 8,537 segments, the counts in `corpus.json` as of 2026-10-14.
 
-   ROWS_WRITTEN_NOTE
+   Rows written: measured against local D1 on 2026-10-14, the first full ingest wrote 8,715 rows and a re-run over a loaded database wrote 17,235 (the per-episode deletes count too). The local counter does not include FTS index writes; the two FTS indexes hold about 9,550 rows, so expect roughly 18,000 to 37,000 rows written per full ingest in production. The Free plan allows 100,000 D1 rows written per day and, since 2026-09-01, fails queries after that, so avoid repeating this step many times in one day. The database's metrics in the Cloudflare dashboard show the actual rows written afterwards.
 
-   The Free plan allows 100,000 D1 rows written per day. The SQL file contains transcript text in `dist/`; do not commit or publish it.
+   The SQL file contains transcript text in `dist/`; do not commit or publish it.
 
 4. **Deploy the Worker.**
 
@@ -59,7 +59,7 @@ These steps are for Conor. Nothing here has been run yet. Run them in order.
    claude mcp list
    ```
 
-   The `tools/list` request uses the stateless handler's protocol metadata headers and body. Verify the curl requests against the deployed handler before treating them as smoke checks.
+   Both curl requests were checked against `wrangler dev --local` on 2026-10-14. The first (legacy `initialize`) answers 200 with an SSE `event: message` carrying `serverInfo.name` `chain-of-thought-podcast`; the second (stateless 2026-07-28 `tools/list`) answers 200 with JSON listing four tools. A request with a browser `Origin` from another site gets 403, and `GET /mcp` gets 405; both are expected.
 
 7. **Check the cron.** Run `npx wrangler tail` around minute 23 of the hour, or inspect state with:
 

@@ -18,6 +18,18 @@ Checks run on 2026-10-14 over all 77 episode files: every segment in `corpus.jso
 per-episode `transcript` entry exactly (text and URL), indexes are contiguous from 0, and every manifest
 entry matches its episode file (number, slug, title, canonical URL).
 
+Three data details found while building, all handled by the server:
+
+- 90 segments in episodes 5, 6, 7 and 9 have `"time": null, "seconds": null`. They keep their index,
+  speaker, text and URL. The `time` and `seconds` columns are nullable, search returns `null` for them,
+  and excerpt lookups by timestamp skip them.
+- 2,583 of 8,537 segment URLs do not end in `#t-<index>`. Two anchor formats exist: `t-N` (7,037) and
+  `t-N-N` (1,500), e.g. episode 75 index 3 is `#t-2-1`. The server stores each URL as published and
+  resolves `#t-…` anchors by matching the stored URL, never by parsing a number out of it.
+- The ASR text has entity errors the episode metadata does not. Episode 49 spells Qwen as "Quen" and
+  "Quinn" in the transcript, while its summary and chapter titles say "Qwen"; episode 48's intro says
+  "Train of Thought". This is one reason search ranking uses episode metadata (section 6).
+
 There are no takeaways or FAQ fields in any endpoint, so the tools do not return them.
 
 Ingest therefore reads the manifest plus the 77 per-episode files. The JSONL file holds a subset of the
@@ -95,6 +107,12 @@ What this means for the design:
   parameter to `json_each(?)`, so the Worker never builds per-row statements.
 - Conclusion: the cron fits the Free plan, so it ships enabled (hourly), with a `REFRESH_ENABLED` var
   as a kill switch and a documented manual refresh path.
+- Request path measurement (`npm run bench`: the real `createMcpHandler` in Node over in-process SQLite
+  with 3 real episodes, 50 runs after warmup, wall time, so it includes the SQL work that D1 does
+  off-Worker in production): legacy `initialize` median 0.9 ms (p95 2.3 ms), `tools/list` median 1.2 ms
+  (p95 1.5 ms), `tools/call search_transcripts` median 1.3 ms (p95 2.2 ms). Cold start is not included.
+  Workers CPU time is not measurable inside `wrangler dev`, so treat these as estimates, and check
+  `exceededCpu` in Workers metrics after deploy.
 
 ### (c) Stateless Streamable HTTP without Durable Objects
 
@@ -162,7 +180,7 @@ episodes(episode PK, slug UNIQUE, season, guid, title, published_at, duration_se
          json_url, audio_url, transistor_url, youtube_url, summary, guests_json, guests_text,
          chapters_json, chapters_text, segment_count, manifest_entry, content_hash, etag,
          ingested_at, checked_at)
-segments(id PK = episode * 100000 + idx, episode, idx, time, seconds, speaker, text, url)
+segments(id PK = episode * 100000 + idx, episode, idx, time NULL, seconds NULL, speaker, text, url)
 segments_fts  FTS5(text, speaker)                             content='segments' content_rowid='id'
 episodes_fts  FTS5(title, guests_text, chapters_text, summary) content='episodes' content_rowid='episode'
 meta(key PK, value)
@@ -182,6 +200,22 @@ Index maintenance without triggers:
   content, delete old segments, insert new segments from `json_each(?)`, FTS insert selected from the new
   content, and the same three steps for the episode row.
 
+### Full ingest, measured locally (2026-10-14)
+
+- `node scripts/build-sql.ts` (online, 78 requests, 26 s): 77 episodes, 8,537 segments, 249 statements,
+  5.3 MB, largest statement 89,875 bytes (limit 100,000).
+- `wrangler d1 execute cot-archive --local --file dist/ingest.sql`: 3.4 s. Row counts afterwards:
+  77 episodes and 8,537 segments, equal to `corpus.json` `counts`; 90 segments with null `time`.
+  FTS5 `integrity-check` passes on both FTS tables.
+- Rows written, summed from `meta.rows_written` of each statement run through a local D1 binding
+  (`getPlatformProxy`): 8,715 on an empty database, 17,235 when re-run over a loaded one (the per-episode
+  deletes count too). The local counter reports each FTS `rebuild` as 1 row; the FTS shadow tables hold
+  about 9,550 rows after a build (`segments_fts_docsize` 8,537, `_data` 477, `_idx` 425, plus the episode
+  index). If D1 counts those writes in production, expect roughly 18,000 to 37,000 rows written per
+  full ingest, well under the Free plan's 100,000 per day, but avoid running it many times in one day.
+- Estimate, not measured: a cron refresh of one episode deletes and reinserts its segments and FTS
+  entries, about 4 × its segment count (roughly 200 to 1,500 rows), plus a few meta rows.
+
 ## 5. Change detection (refresh)
 
 The manifest has no per-episode timestamp or hash, so the server stores:
@@ -197,12 +231,79 @@ complete), a new episode (highest number first), an episode whose manifest entry
 round-robin check of the episode with the oldest `checked_at`. Hourly runs re-verify all 77 episodes in
 about 3.2 days, so corrections that do not touch the manifest are picked up within that window.
 
-## 6. Build process
+## 6. Search ranking
 
-Code and tests were authored by Codex (OpenAI Codex CLI, `codex exec`) from written briefs, with Claude
-as pilot: research, briefs, dependency installs, local D1, `wrangler dev`, integration runs, the full
-ingest, and review. See the final section of this file for the run log.
+`search_transcripts` ranks passages with FTS5 `bm25(segments_fts, 1.0, 0.25)` (text weighted over
+speaker) plus `0.4 × bm25(episodes_fts, 8.0, 6.0, 3.0, 1.0)` for the passage's episode when the
+episode's title, guests, chapter titles or summary match the query (terms joined with OR). Passages
+containing all query terms come first; an any-term pass fills the remaining slots. Passages whose
+snippets share the same first 80 letters and digits collapse to one result, which removes repeated
+sponsor reads.
+
+Why: on the full corpus, plain passage bm25 put sponsor reads in all top 3 slots for "portable agent
+memory switching models", and missed episode 49 for "Qwen summarization cost" because its transcript
+spells Qwen as "Quen" and "Quinn" while its summary and chapter titles spell it correctly. The weight
+0.4 came from comparing 0, 0.25 and 0.5 on the queries below: 0.25 left episode 70 above 48 for the
+Block query; 0.4 and 0.5 both matched, and 0.4 keeps more weight on the passage itself.
+
+`npm run eval` checks the full corpus (expected top episode per query, as of 2026-10-14):
+
+| Query | Top 3 (episode #anchor) |
+| --- | --- |
+| Block MCP rollout 12,000 employees | 48 #t-2, 70 #t-55-1, 48 #t-0 |
+| Qwen summarization cost | 49 #t-3, 49 #t-4, 49 #t-7 |
+| portable agent memory switching models | 77 #t-1, 73 #t-10-2 (sponsor read), 77 #t-0 |
+| why multi-agent systems fail | 33 #t-57, 33 #t-60, 33 #t-55 |
+| Jack Dorsey | 48 #t-16, 48 #t-0, 20 #t-80 |
+| Snowdon catastrophic forgetting | 69 #t-22, 69 #t-10, 53 #t-22 |
+
+The same script checks that `#t-2-1` in episode 75 resolves to segment index 3. Run against the
+3-episode fixture it fails and exits 1, which shows the check can fail.
+
+## 7. Verification record (local, 2026-10-14)
+
+- Unit tests: 25 pass (`npx vitest run`), offline, synthetic data, node:sqlite with FTS5. They cover the
+  sanitizer (including a seeded fuzz loop whose output runs as `MATCH` against real FTS5), input bounds,
+  formatting, ingest validation and hashing, SQL generation (idempotent re-run), the refresh logic with
+  a fake fetch, and the four tools.
+- Integration: 4 pass against `wrangler dev --local` with episodes 77, 38 and 2 in local D1, through both
+  `@modelcontextprotocol/client@2.0.0` and the legacy `@modelcontextprotocol/sdk@1.30.0` client.
+  Expected values are read from the real episode files at test time.
+- Hostile queries through the live tool: `"`, `*`, `-`, `:` and the empty string return the "no
+  searchable words" error; `NEAR(`, `AND OR NOT`, `title:foo`, `(x OR y)`, `a NEAR/3 b`, CJK and accented
+  input return results or an empty list; 1,000 characters fails schema validation (max 200). No input
+  produced an FTS syntax error.
+- Origin: a browser `Origin: https://evil.example` gets 403; `https://chainofthought.show` and
+  `http://localhost:6274` pass. `GET /mcp` is 405 and unknown paths are 404.
+- Cron, fixture database, live site: three runs ingested episodes 76, 75 and 74 (one per run, newest
+  first); FTS5 `integrity-check` passed afterwards.
+- Cron, full database: two runs returned `checked` / `not_modified` (ETag stored by build-sql, sent as
+  `If-None-Match`). After altering one episode 9 segment and clearing its hash and ETag, the next run
+  re-ingested episode 9 (`content_changed`): the altered text was gone, its 21 null-timestamp segments
+  were intact, and FTS `integrity-check` passed. With only the ETag cleared, episodes 5 and 50 returned
+  `checked` / `content_unchanged`, so the Worker computes the same SHA-256 as the Node build script.
+- `server.json` validates against
+  https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json (the latest released
+  schema per the registry's server-json CHANGELOG) using `@cfworker/json-schema`; a copy with a
+  101-character description and an unknown transport type fails the same check.
+- The DEPLOY.md curl smoke tests return 200 locally (SSE for legacy `initialize`, JSON for stateless
+  `tools/list`).
+
+## 8. Build process
+
+Code, tests, README, DEPLOY, LICENSE and server.json were authored by Codex (OpenAI Codex CLI 0.162.1,
+`codex exec -s workspace-write`, reasoning effort high) from written briefs. Claude was the pilot: doc
+research, this file, the briefs, the ranking prototype, dependency installs, `wrangler types`, local D1,
+`wrangler dev`, integration and eval runs, the full ingest, review, small doc edits and the commits.
+
+Codex could not spawn child processes in its sandbox (`spawn EPERM`), so it could not run
+`wrangler types` or Vitest's default fork pool; it ran Vitest with `--pool threads` and the pilot ran
+everything else outside the sandbox.
 
 ## Codex run log
 
-(Filled in after each run.)
+| Round | Model (from the exec header) | Session | Scope | Pilot findings sent back |
+| --- | --- | --- | --- | --- |
+| 1 | gpt-6-sol | 01a13b3a-dfd4-7050-a495-a1737ce80507 | Worker, tools, sanitizer, schema, ingest, build-sql, refresh, unit and integration tests, bench | null timestamps in the real corpus; node tsconfig errors with generated types; integration helper parsed error text as JSON; dense code style |
+| 2 | gpt-6-sol | 01a13b51-efa2-7291-a8d2-7319eb940619 | Fixes above, README, DEPLOY, LICENSE, server.json, reformat | ranking problems on the full corpus; `#t-N-N` anchors |
+| 3 | gpt-6-sol | 01a13b63-cfee-7861-a174-33b5e1470bff | Episode-aware ranking, duplicate collapsing, anchor resolution, eval script | none blocking |

@@ -61,7 +61,7 @@ This uses local scope by default. `--scope project` writes `.mcp.json`; a projec
 
 ### Claude apps custom connector
 
-In [Claude's connector settings](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp), open Customize > Connectors > **+ Add** > **Add custom connector**. Enter `chain-of-thought` and `https://mcp.chainofthought.show/mcp`, select **Continue**, choose **No sign in** under Authentication, then select **Add**. Free users can add one custom connector. Team and Enterprise workspace permissions may limit who can add one.
+In [Claude's connector settings](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp), open Customize > Connectors > **+ Add** > **Add custom connector**. Enter `chain-of-thought` and `https://mcp.chainofthought.show/mcp`, select **Continue**, choose **No sign in** under Authentication, then select **Add**. Free plans are limited to one custom connector. On Team plans only Owners and Primary Owners can add connectors; on Enterprise, Owners, Primary Owners and roles with Manage access to Libraries can.
 
 ### Cursor
 
@@ -73,7 +73,7 @@ Add this to `.cursor/mcp.json` for a project or `~/.cursor/mcp.json` globally, f
 
 ### ChatGPT
 
-Open [ChatGPT plugins](https://chatgpt.com/plugins), select the plus button, then **Add custom MCP server**. Enter `chain-of-thought` and a description. Under Connection, enter `https://mcp.chainofthought.show/mcp`. Configure authentication as none, review the risk warning, select **I understand and want to continue**, then **Create as a plugin** and review the discovered tools. A public HTTPS endpoint is required; account and workspace policies apply. See the [OpenAI connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt).
+Open [ChatGPT plugins](https://chatgpt.com/plugins), select the plus button, then **Add custom MCP server**. Enter `chain-of-thought` and a description. Under Connection, enter `https://mcp.chainofthought.show/mcp`. Configure authentication (this server needs none), review the risk warning, select **I understand and want to continue**, then **Create as a plugin** and review the discovered tools. A public HTTPS endpoint is required; account and workspace policies apply. See the [OpenAI connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt).
 
 ## Citing and usage terms
 
@@ -93,7 +93,7 @@ The source corpus states:
 
 Queries are limited to 200 characters. Search returns 1–20 results (default 8). Snippets are about 600 characters; excerpt segments are at most 1,500 characters, with at most 16 segments per excerpt. No tool returns a whole transcript. Some segments in early episodes 5, 6, 7 and 9 have no timestamp: `time` and `seconds` are `null`, while their URLs still work.
 
-An hourly cron adds, changes or removes at most one episode per run. New episodes appear one per hour. Transcript corrections are picked up when the round-robin check reaches an episode; at one per hour, all 77 episodes take about 3.2 days. Logs record tool name, success, result count and duration. Query text is not logged.
+An hourly cron adds, changes or removes at most one episode per run, so a newly published episode is searchable within about an hour of appearing in `corpus.json`. Transcript corrections are picked up when the round-robin check reaches an episode; at one per hour, all 77 episodes take about 3.2 days. Logs record tool name, success, result count and duration. Query text is not logged.
 
 ## Development
 
