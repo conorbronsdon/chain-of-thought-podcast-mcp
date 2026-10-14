@@ -9,8 +9,18 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "types": "wrangler types",
-    "typecheck": "tsc --noEmit"
+    "types": "wrangler types --strict-vars=false",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run --configLoader runner --pool threads",
+    "test:integration": "vitest run -c vitest.integration.config.ts --configLoader runner --pool threads",
+    "build-sql": "node scripts/build-sql.ts",
+    "build-sql:fixture": "node scripts/build-sql.ts --offline --only 77,38,2 --out dist/fixture.sql",
+    "query": "node scripts/query.ts",
+    "bench": "node scripts/bench-handler.ts",
+    "dev:fixture": "wrangler dev --local --persist-to .wrangler/fixture --port 8787",
+    "db:fixture": "wrangler d1 execute cot-archive --local --persist-to .wrangler/fixture --file dist/fixture.sql --yes",
+    "dev:full": "wrangler dev --local --persist-to .wrangler/full --port 8787",
+    "db:full": "wrangler d1 execute cot-archive --local --persist-to .wrangler/full --file dist/ingest.sql --yes"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
