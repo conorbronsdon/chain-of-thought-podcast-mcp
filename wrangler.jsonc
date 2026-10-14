@@ -8,9 +8,8 @@
   "routes": [ { "pattern": "mcp.chainofthought.show/*", "zone_name": "chainofthought.show" } ],
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "d1_databases": [
-    { "binding": "DB", "database_name": "cot-archive", "database_id": "00000000-0000-0000-0000-000000000000" }
+    { "binding": "DB", "database_name": "cot-archive", "database_id": "adafc68b-c9eb-43f6-8d36-b63ea5594f2f" }
   ],
-  // Replace the placeholder database_id with the ID returned by wrangler d1 create cot-archive.
   // Hourly at minute 23; refreshes at most one episode per run.
   "triggers": { "crons": ["23 * * * *"] },
   "vars": {
