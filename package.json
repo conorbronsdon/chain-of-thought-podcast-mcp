@@ -14,7 +14,7 @@
     "test": "vitest run --configLoader runner --pool threads",
     "test:integration": "vitest run -c vitest.integration.config.ts --configLoader runner --pool threads",
     "build-sql": "node scripts/build-sql.ts",
-    "build-sql:fixture": "node scripts/build-sql.ts --offline --only 77,38,2 --out dist/fixture.sql",
+    "build-sql:fixture": "node scripts/build-sql.ts --only 77,38,2 --out dist/fixture.sql",
     "query": "node scripts/query.ts",
     "bench": "node scripts/bench-handler.ts",
     "dev:fixture": "wrangler dev --local --persist-to .wrangler/fixture --port 8787",

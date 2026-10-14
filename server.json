@@ -1,0 +1,15 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.conorbronsdon/chain-of-thought-podcast-mcp",
+  "title": "Chain of Thought podcast archive",
+  "description": "Search and cite Chain of Thought podcast transcripts and episodes.",
+  "repository": {
+    "url": "https://github.com/conorbronsdon/chain-of-thought-podcast-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://chainofthought.show",
+  "version": "0.1.0",
+  "remotes": [
+    { "type": "streamable-http", "url": "https://mcp.chainofthought.show/mcp" }
+  ]
+}

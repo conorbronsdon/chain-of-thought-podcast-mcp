@@ -1,23 +1,132 @@
-# Chain of Thought archive MCP server
+# Chain of Thought podcast archive MCP server
 
-Read-only Streamable HTTP MCP server for searching and citing the [Chain of Thought podcast](https://chainofthought.show), hosted by Conor Bronsdon. It exposes `search_transcripts`, `search_episodes`, `get_episode`, and `get_transcript_excerpt` at `/mcp`. Cite the episode URLs in results, not the MCP endpoint. Transcripts are machine-generated; verify exact quotations against the recording.
+This read-only Model Context Protocol server lets AI agents and coding assistants search the transcripts and episode metadata of [Chain of Thought](https://chainofthought.show), the podcast hosted by Conor Bronsdon, and cite its episode pages. It needs no login or API key. It runs as a Cloudflare Worker with D1 full-text search.
 
-## Local fixture
+## Endpoint
 
-The source cache belongs in `.cache/corpus/` and is not committed. With the cached files and installed dependencies:
+`https://mcp.chainofthought.show/mcp` is **not deployed yet (pending review)**. The transport is stateless Streamable HTTP. `GET /` describes the server and `GET /health` returns `ok`.
+
+## Tools
+
+| Tool | Inputs | Returns |
+| --- | --- | --- |
+| `search_transcripts` | `query` (up to 200 characters), `limit` (1–20, default 8), optional `episode` (1–9999) | Ranked passages with episode, guests, speaker, timestamp, snippet, moment URL and citation. |
+| `search_episodes` | `query` (up to 200 characters), `limit` (1–20, default 8) | Ranked episodes with date, guests, summary, matching chapters, URL and citation. |
+| `get_episode` | `episode` (1–9999) or `slug` (up to 300 characters, including a full episode URL) | Metadata, guests, chapters and episode, YouTube and audio links. |
+| `get_transcript_excerpt` | `episode` (1–9999), optional `at` (segment index, `#t-N`, `t-N`, `m:ss` or `h:mm:ss`), `before` (0–5, default 2), `after` (0–10, default 5) | Up to 16 consecutive segments with individual URLs, plus anchor and pagination flags. |
+
+A `search_transcripts` result has this shape (text values abbreviated):
+
+```json
+{
+  "episode": 77,
+  "episode_title": "…",
+  "guests": ["…"],
+  "published_at": "…",
+  "speaker": "…",
+  "time": "…",
+  "seconds": 29,
+  "segment_index": 2,
+  "snippet": "…",
+  "match": "all_terms",
+  "url": "https://chainofthought.show/podcast/…/#t-2",
+  "episode_url": "https://chainofthought.show/podcast/…/",
+  "cite": "Chain of Thought, chainofthought.show — https://chainofthought.show/podcast/…/#t-2"
+}
+```
+
+## Connect
+
+These steps follow each vendor's docs as of 2026-10-14. The endpoint must be deployed before a client can connect.
+
+### Claude Code
+
+Run the [Claude Code MCP command](https://code.claude.com/docs/en/mcp):
+
+```sh
+claude mcp add --transport http chain-of-thought https://mcp.chainofthought.show/mcp
+```
+
+This uses local scope by default. `--scope project` writes `.mcp.json`; a project entry is:
+
+```json
+{"mcpServers":{"chain-of-thought":{"type":"http","url":"https://mcp.chainofthought.show/mcp"}}}
+```
+
+`--scope user` makes it available across projects.
+
+### Claude apps custom connector
+
+In [Claude's connector settings](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp), open Customize > Connectors > **+ Add** > **Add custom connector**. Enter `chain-of-thought` and `https://mcp.chainofthought.show/mcp`, select **Continue**, choose **No sign in** under Authentication, then select **Add**. Free users can add one custom connector. Team and Enterprise workspace permissions may limit who can add one.
+
+### Cursor
+
+Add this to `.cursor/mcp.json` for a project or `~/.cursor/mcp.json` globally, following the [Cursor MCP docs](https://cursor.com/docs/context/mcp):
+
+```json
+{"mcpServers":{"chain-of-thought":{"url":"https://mcp.chainofthought.show/mcp"}}}
+```
+
+### ChatGPT
+
+Open [ChatGPT plugins](https://chatgpt.com/plugins), select the plus button, then **Add custom MCP server**. Enter `chain-of-thought` and a description. Under Connection, enter `https://mcp.chainofthought.show/mcp`. Configure authentication as none, review the risk warning, select **I understand and want to continue**, then **Create as a plugin** and review the discovered tools. A public HTTPS endpoint is required; account and workspace policies apply. See the [OpenAI connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt).
+
+## Citing and usage terms
+
+The source corpus states:
+
+> Attribution: "Chain of Thought — chainofthought.show"
+>
+> Canonical: "Every record carries canonicalUrl. Cite that page, not this endpoint: it is the authoritative rendering and the one that gets corrected."
+>
+> Transcripts: "Machine-generated (ASR), with entity corrections applied during sync. Transcripts may contain errors; verify quotations against the recording."
+>
+> Redistribution: "This endpoint grants no additional licence to redistribute transcript text as a dataset or corpus. Link to and cite the episode page."
+
+`url` is the page to cite; for a transcript passage it includes `#t-N` to open that segment. `episode_url` is the episode page without a segment anchor. `cite` combines attribution and `url` in the format `Chain of Thought, chainofthought.show — <url>`.
+
+## Limits and freshness
+
+Queries are limited to 200 characters. Search returns 1–20 results (default 8). Snippets are about 600 characters; excerpt segments are at most 1,500 characters, with at most 16 segments per excerpt. No tool returns a whole transcript. Some segments in early episodes 5, 6, 7 and 9 have no timestamp: `time` and `seconds` are `null`, while their URLs still work.
+
+An hourly cron adds, changes or removes at most one episode per run. New episodes appear one per hour. Transcript corrections are picked up when the round-robin check reaches an episode; at one per hour, all 77 episodes take about 3.2 days. Logs record tool name, success, result count and duration. Query text is not logged.
+
+## Development
+
+Use Node 22.18 or newer:
+
+```sh
+npm ci
+npm test
+npm run typecheck
+```
+
+For the three-episode fixture, run these in order, with `dev:fixture` kept running for the integration test:
 
 ```sh
 npm run build-sql:fixture
 npm run db:fixture
 npm run dev:fixture
+MCP_URL=http://127.0.0.1:8787/mcp npm run test:integration
 ```
 
-In another terminal, run `npm run test:integration` or `npm run query -- search_transcripts '{"query":"agent memory"}'`.
+For the full corpus:
 
-`npm test` runs offline unit tests. `npm run typecheck` checks the worker, scripts, and tests. The integration suite requires a running local Worker with episodes 77, 38, and 2 loaded.
+```sh
+npm run build-sql
+npm run db:full
+npm run dev:full
+npm run query -- --top 3 --compact search_transcripts '{"query":"..."}'
+```
 
-## Source-data validation
+To test the cron locally, start `wrangler dev --test-scheduled` and call:
 
-The SQL builder rejects segments whose `time` is not a string or whose `seconds` is not finite. The current cached corpus has null values in episodes 5, 6, 7, and 9, so a full `npm run build-sql -- --offline` stops until the source data is corrected. The three-episode fixture is valid.
+```sh
+curl "http://127.0.0.1:8787/__scheduled?cron=23+*+*+*+*"
+```
 
-See [DEPLOY.md](DEPLOY.md) for the D1 ID and route setup.
+`dist/` and `.cache/` hold transcript text and are gitignored. Do not commit or publish them. See [Deploying](DEPLOY.md) and the [design notes](docs/DESIGN.md).
+
+## License
+
+The code in this repository is MIT licensed; see [LICENSE](LICENSE). That license does not cover podcast transcripts, episode metadata or other content served by chainofthought.show, which this server reads at runtime. The usage terms above apply to that content.

@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "types": ["node", "./worker-configuration.d.ts"], "lib": ["ES2022", "DOM"] },
+  "compilerOptions": { "types": ["node", "./worker-configuration.d.ts"], "lib": ["ES2024", "DOM"] },
   "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "vitest*.ts", "worker-configuration.d.ts"]
 }

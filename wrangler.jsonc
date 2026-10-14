@@ -10,10 +10,11 @@
     { "binding": "DB", "database_name": "cot-archive", "database_id": "00000000-0000-0000-0000-000000000000" }
   ],
   // Replace the placeholder database_id with the ID returned by wrangler d1 create cot-archive.
+  // Hourly at minute 23; refreshes at most one episode per run.
   "triggers": { "crons": ["23 * * * *"] },
   "vars": {
     "CORPUS_BASE_URL": "https://chainofthought.show",
-    "REFRESH_ENABLED": "true",
+    "REFRESH_ENABLED": "true", // Set to "false" to stop refreshes without removing the trigger.
     "MCP_HOSTNAMES": "mcp.chainofthought.show",
     "MCP_ORIGIN_HOSTNAMES": "chainofthought.show,mcp.chainofthought.show"
   }
@@ -21,5 +22,8 @@
   // A zone route is used instead of "custom_domain": true, which fails with code 100117
   // when a DNS record already exists for the hostname.
   // "routes": [ { "pattern": "mcp.chainofthought.show/*", "zone_name": "chainofthought.show" } ],
-  // Rate limiting: not configured. Free-plan availability is undocumented (docs/DESIGN.md section 2d).
+  // Rate limiting: not configured. Free-plan binding availability is undocumented
+  // (docs/DESIGN.md section 2d). Confirm account support before enabling.
+  // Code must also call the binding.
+  // "ratelimits": [ { "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } } ]
 }
