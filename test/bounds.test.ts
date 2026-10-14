@@ -11,8 +11,37 @@ const envFor = (shim: D1Shim): Env => ({
   DB: d1(shim),
   CORPUS_BASE_URL: "https://chainofthought.show",
   REFRESH_ENABLED: "false",
+  ALLOW_WORKERS_DEV: "false",
   MCP_HOSTNAMES: "",
   MCP_ORIGIN_HOSTNAMES: "",
+});
+
+it("blocks workers.dev before routing or D1 unless explicitly enabled", async () => {
+  const shim = new D1Shim();
+  const env = envFor(shim);
+  const ctx = fakeExecutionContext();
+  const origin = "https://cot-archive-mcp.example.workers.dev";
+  const requests = [
+    new Request(`${origin}/`),
+    new Request(`${origin}/health`),
+    new Request(`${origin}/mcp`, { method: "POST", body: "x".repeat(8193) }),
+  ];
+  for (const request of requests) {
+    const response = await worker.fetch(request, env, ctx);
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("Not found");
+  }
+  expect(shim.preparedSql).toHaveLength(0);
+  env.ALLOW_WORKERS_DEV = "TRUE";
+  expect((await worker.fetch(new Request(`${origin}/health`), env, ctx)).status).toBe(404);
+  env.ALLOW_WORKERS_DEV = "true";
+  expect(await (await worker.fetch(new Request(`${origin}/health`), env, ctx)).text())
+    .toBe("ok");
+  const list = new Request(`${origin}/mcp`, requestFor("tools/list", {}));
+  list.headers.set("host", new URL(origin).host);
+  expect((await worker.fetch(list, env, ctx)).status).toBe(200);
+  expect(shim.preparedSql).toHaveLength(0);
+  shim.close();
 });
 
 const requestFor = (method: string, params: Record<string, unknown>) => new Request(
@@ -132,7 +161,9 @@ it("reuses normalized tool results from the Workers cache without D1 reads", asy
   }));
   const saved = new Map<string, Response>();
   vi.stubGlobal("caches", { default: {
-    match: async (key: Request) => saved.get(key.url)?.clone(),
+    match: async (key: Request) => key.url.includes("query=like")
+      ? Response.json({ results: [{ bogus: true }] })
+      : saved.get(key.url)?.clone(),
     put: async (key: Request, response: Response) => { saved.set(key.url, response.clone()); },
   } });
   try {
@@ -154,6 +185,11 @@ it("reuses normalized tool results from the Workers cache without D1 reads", asy
     expect(saved.size).toBe(1);
     expect(saved.values().next().value?.headers.get("cache-control"))
       .toBe("public, max-age=3600");
+    const rejected = await worker.fetch(requestFor("tools/call", {
+      name: "search_transcripts", arguments: { query: "like", limit: 2 },
+    }), env, ctx);
+    expect(await rejected.text()).toContain("no searchable words");
+    expect(shim.preparedSql).toHaveLength(count);
   } finally {
     vi.unstubAllGlobals();
     shim.close();

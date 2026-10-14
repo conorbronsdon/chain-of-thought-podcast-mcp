@@ -38,20 +38,29 @@ These steps are for Conor. Nothing here has been run yet. Run them in order.
 
    The SQL file contains transcript text in `dist/`; do not commit or publish it.
 
-4. **Deploy the Worker.**
+4. **Create the hostname before the first deploy.** In the Cloudflare dashboard for
+   `chainofthought.show`, add a proxied DNS record: type `AAAA`, name `mcp`, value `100::`.
+   The zone route for `mcp.chainofthought.show/*` is already active in `wrangler.jsonc`.
+   The route avoids the `custom_domain` code 100117 failure seen when a DNS record already
+   exists for the hostname. [Cloudflare's routes page](https://developers.cloudflare.com/workers/configuration/routing/routes/)
+   recommends Custom Domains over `100::` records.
+
+5. **Deploy the Worker to the zone route.** Keep `workers_dev` set to `false` and
+   `ALLOW_WORKERS_DEV` set to `"false"` in `wrangler.jsonc`.
 
    ```sh
    npx wrangler deploy
    ```
 
-   Test `/health` and `/` on the `workers.dev` URL printed by Wrangler.
-
-5. **Attach the hostname.** In the Cloudflare dashboard for `chainofthought.show`, add a proxied DNS record: type `AAAA`, name `mcp`, value `100::`. Uncomment the `routes` entry in `wrangler.jsonc`, then run `npx wrangler deploy` again. The planned zone route avoids the `custom_domain` code 100117 failure seen when a DNS record already exists for a hostname. No record exists for `mcp.` today, so a Custom Domain would also work. [Cloudflare's routes page](https://developers.cloudflare.com/workers/configuration/routing/routes/) recommends Custom Domains over `100::` records. After routing works, you can set `"workers_dev": false` and redeploy.
+   A `workers.dev` hostname bypasses the zone's WAF rate rule, so the Worker returns 404
+   there unless `ALLOW_WORKERS_DEV` is explicitly set to `"true"`. Leave both defaults
+   in place for production.
 
 6. **Smoke test the public endpoint.**
 
    ```sh
    curl https://mcp.chainofthought.show/health
+   curl https://mcp.chainofthought.show/
    curl -i https://mcp.chainofthought.show/mcp -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
    curl -i https://mcp.chainofthought.show/mcp -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "MCP-Protocol-Version: 2026-07-28" -H "Mcp-Method: tools/list" --data '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"}}}}'
    npm run query -- --url https://mcp.chainofthought.show/mcp --top 3 --compact search_transcripts '{"query":"portable agent memory"}'

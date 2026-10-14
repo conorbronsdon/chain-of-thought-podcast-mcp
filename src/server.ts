@@ -1,11 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { buildFtsQuery } from "./fts.ts";
 import {
   getEpisode,
   getTranscriptExcerpt,
   searchEpisodes,
   searchTranscripts,
   ToolInputError,
+  noWords,
 } from "./tools.ts";
 
 export const searchTranscriptsSchema = z.object({
@@ -98,6 +100,10 @@ export function createServer(env: Env, cacheOrigin: string): McpServer {
       const query = typeof args.query === "string"
         ? args.query.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase()
         : undefined;
+      if (query !== undefined && (tool === "search_transcripts" || tool === "search_episodes")
+        && !buildFtsQuery(query)) {
+        throw new ToolInputError(noWords);
+      }
       const key = new Request(`${cacheOrigin}/__mcp_cache/${tool}?${new URLSearchParams({
         query: query ?? "",
         limit: String(args.limit ?? ""),

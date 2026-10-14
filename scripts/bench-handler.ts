@@ -28,6 +28,7 @@ async function main() {
     DB: d1(shim),
     CORPUS_BASE_URL: "https://chainofthought.show",
     REFRESH_ENABLED: "false",
+    ALLOW_WORKERS_DEV: "false",
     MCP_HOSTNAMES: "",
     MCP_ORIGIN_HOSTNAMES: "",
   };

@@ -49,7 +49,7 @@ type SegmentRow = {
   url: string;
 };
 
-const noWords = "The query has no searchable words. Use plain words, names or numbers.";
+export const noWords = "The query has no searchable words. Use a specific topic, name or number instead of filler words.";
 // Episode metadata is curated and spells names correctly when ASR passages do not.
 // A passage is more likely to answer the query when its episode title, guests,
 // chapters or summary also match.

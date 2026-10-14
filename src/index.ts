@@ -70,6 +70,9 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
       const url = new URL(request.url);
+      if (url.hostname.endsWith(".workers.dev") && env.ALLOW_WORKERS_DEV !== "true") {
+        return new Response("Not found", { status: 404, headers: plain });
+      }
       if (url.pathname === "/" && (request.method === "GET" || request.method === "HEAD")) {
         const body = [
           "Chain of Thought podcast archive",

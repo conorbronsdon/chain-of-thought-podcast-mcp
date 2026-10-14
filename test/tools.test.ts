@@ -169,6 +169,15 @@ it("runs one FTS query for one search term in each search tool", async () => {
     .toHaveLength(1);
 });
 
+it("rejects filler-only searches before preparing a D1 query", async () => {
+  const start = shim.preparedSql.length;
+  for (const search of [searchTranscripts, searchEpisodes]) {
+    await expect(search(d1(shim), { query: "like know yeah", limit: 8 }))
+      .rejects.toThrow(/no searchable words.*specific topic/u);
+  }
+  expect(shim.preparedSql).toHaveLength(start);
+});
+
 it("limits FTS candidates before joins and skips fill when all terms fill the limit", async () => {
   const start = shim.preparedSql.length;
   await searchTranscripts(d1(shim), { query: "portable memory", limit: 1 });

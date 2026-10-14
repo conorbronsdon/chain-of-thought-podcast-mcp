@@ -7,6 +7,14 @@ const STOP = new Set([
   "should", "would",
 ]);
 
+// Common speech fillers are too frequent in transcripts to be useful search terms.
+const FILLERS = new Set([
+  "like", "know", "yeah", "um", "uh", "really", "think", "actually",
+  "kind", "sort", "just", "right", "okay", "ok", "lot", "thing",
+  "things", "going", "gonna", "mean", "stuff", "guess", "basically",
+  "literally", "totally", "pretty", "maybe", "well", "so", "you",
+]);
+
 // Quotes sanitized terms so user syntax cannot reach FTS MATCH directly.
 export function buildFtsQuery(input: string): {
   all: string;
@@ -24,16 +32,19 @@ export function buildFtsQuery(input: string): {
     if (runs.length === 1 && /^[a-z]$/u.test(runs[0])) continue;
     if (runs.length) raw.push(runs.join(" "));
   }
-  const hasContent = raw.some(x => x.includes(" ") || !STOP.has(x));
-  const useful = hasContent ? raw.filter(x => x.includes(" ") || !STOP.has(x)) : raw;
+  const withoutFillers = raw.filter(x => !FILLERS.has(x));
+  const hasContent = withoutFillers.some(x => x.includes(" ") || !STOP.has(x));
+  const useful = hasContent
+    ? withoutFillers.filter(x => x.includes(" ") || !STOP.has(x))
+    : withoutFillers;
   const terms = [...new Set(useful.map(x => `"${x}"`))].slice(0, 12);
-  const fillTerms = [...new Set(raw.filter(x => x.includes(" ") || !STOP.has(x)))]
+  const fillTerms = [...new Set(withoutFillers.filter(x => x.includes(" ") || !STOP.has(x)))]
     .sort((a, b) => b.length - a.length)
     .slice(0, 4)
     .map(x => `"${x}"`);
   return terms.length ? {
     all: terms.join(" "), any: terms.join(" OR "),
     fill: fillTerms.length > 1 ? fillTerms.join(" OR ") : null,
-    terms, contentTerms: [...new Set(raw.filter(x => x.includes(" ") || !STOP.has(x)))],
+    terms, contentTerms: [...new Set(withoutFillers.filter(x => x.includes(" ") || !STOP.has(x)))],
   } : null;
 }

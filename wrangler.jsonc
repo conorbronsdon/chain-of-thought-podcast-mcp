@@ -4,7 +4,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-26",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": true,
+  "workers_dev": false,
+  "routes": [ { "pattern": "mcp.chainofthought.show/*", "zone_name": "chainofthought.show" } ],
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "d1_databases": [
     { "binding": "DB", "database_name": "cot-archive", "database_id": "00000000-0000-0000-0000-000000000000" }
@@ -15,13 +16,13 @@
   "vars": {
     "CORPUS_BASE_URL": "https://chainofthought.show",
     "REFRESH_ENABLED": "true", // Set to "false" to stop refreshes without removing the trigger.
+    "ALLOW_WORKERS_DEV": "false", // Only set to "true" for an explicit temporary workers.dev test.
     "MCP_HOSTNAMES": "mcp.chainofthought.show",
     "MCP_ORIGIN_HOSTNAMES": "chainofthought.show,mcp.chainofthought.show"
   }
-  // Custom hostname. Uncomment after the proxied DNS record exists (see DEPLOY.md).
+  // The proxied DNS record must exist before the first deploy (see DEPLOY.md).
   // A zone route is used instead of "custom_domain": true, which fails with code 100117
   // when a DNS record already exists for the hostname.
-  // "routes": [ { "pattern": "mcp.chainofthought.show/*", "zone_name": "chainofthought.show" } ],
   // Rate limiting: not configured. Free-plan binding availability is undocumented
   // (docs/DESIGN.md section 2d). Confirm account support before enabling.
   // Code must also call the binding.

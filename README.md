@@ -93,7 +93,7 @@ The source corpus states:
 
 Queries are limited to 200 characters. Search returns 1–20 results (default 8). Snippets are about 600 characters; excerpt segments are at most 1,500 characters, with at most 16 segments per excerpt. No tool returns a whole transcript. Some segments in early episodes 5, 6, 7 and 9 have no timestamp: `time` and `seconds` are `null`, while their URLs still work.
 
-An hourly cron adds, changes or removes at most one episode per run, so a newly published episode is searchable within about an hour of appearing in `corpus.json`. Transcript corrections are picked up when the round-robin check reaches an episode; at one per hour, all 77 episodes take about 3.2 days. Logs record tool name, success, result count and duration. Query text is not logged.
+An hourly cron adds, changes or removes at most one episode per run, so a newly published episode is usually indexed within about an hour of appearing in `corpus.json` when there is no backlog. Successful tool results are cached for one hour; a repeated search can therefore return pre-ingest results for up to about another hour. Transcript corrections are picked up when the round-robin check reaches an episode; at one per hour, all 77 episodes take about 3.2 days. Logs record tool name, success, result count and duration. Query text is not logged.
 
 ## Development
 

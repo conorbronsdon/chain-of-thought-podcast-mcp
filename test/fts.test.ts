@@ -21,6 +21,21 @@ describe("FTS sanitizer", () => {
     expect(broad.fill).not.toMatch(/"a"|"how"|"to"|"in"/u);
   });
 
+  it("drops conversational fillers from search and fill terms", () => {
+    const fillers = [
+      "like", "know", "yeah", "um", "uh", "really", "think", "actually",
+      "kind", "sort", "just", "right", "okay", "ok", "lot", "thing",
+      "things", "going", "gonna", "mean", "stuff", "guess", "basically",
+      "literally", "totally", "pretty", "maybe", "well", "so", "you",
+    ];
+    for (const filler of fillers) expect(buildFtsQuery(filler)).toBeNull();
+    expect(buildFtsQuery(fillers.join(" "))).toBeNull();
+    const query = buildFtsQuery("like portable memory know switching models yeah")!;
+    expect(query.all).toBe('"portable" "memory" "switching" "models"');
+    expect(query.fill).toBe('"switching" OR "portable" OR "memory" OR "models"');
+    expect(query.contentTerms).toEqual(["portable", "memory", "switching", "models"]);
+  });
+
   it("never emits invalid MATCH syntax for hostile or fuzzed text", () => {
     const db = new DatabaseSync(":memory:");
     db.exec(`

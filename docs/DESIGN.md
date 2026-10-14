@@ -141,8 +141,10 @@ What this means for the design:
   `@modelcontextprotocol/client@2.0.0` and `@modelcontextprotocol/sdk@1.30.0`.
 - Host and Origin checks (read from the handler source in `agents@0.24.0`): if `allowedHostnames` is
   unset, the handler checks Host only for localhost and `*.workers.dev` endpoints; if set, the list
-  replaces those defaults. The server therefore passes `allowedHostnames` only when the request host is
-  not localhost or `workers.dev`, using the `MCP_HOSTNAMES` var (`mcp.chainofthought.show`). Browser
+  replaces those defaults. The Worker returns 404 for `*.workers.dev` before routing or D1 work unless
+  `ALLOW_WORKERS_DEV` is exactly `"true"`; production sets it to `"false"` and disables the
+  `workers.dev` hostname. The server passes `allowedHostnames` only when the request host is
+  neither localhost nor `workers.dev`, using the `MCP_HOSTNAMES` var (`mcp.chainofthought.show`). Browser
   Origins default to localhost, the `workers.dev` host and the CORS origin; the server adds
   `chainofthought.show` and `mcp.chainofthought.show`. Requests without an Origin header (Claude Code,
   Cursor, server-side connectors) are accepted.
@@ -244,11 +246,16 @@ about 3.2 days, so corrections that do not touch the manifest are picked up with
 
 `search_transcripts` ranks passages with FTS5 `bm25(segments_fts, 1.0, 0.25)` (text weighted over
 speaker) plus `0.4 × bm25(episodes_fts, 8.0, 6.0, 3.0, 1.0)` for the passage's episode when the
-episode's title, guests, chapter titles or summary match the query (terms joined with OR). Passages
-containing all query terms come first; a capped any-term pass fills the remaining slots. Both FTS
+episode's title, guests, chapter titles or summary match the query. The episode boost uses up to four
+of the longest content words joined with OR when an any-term fill exists (`q.fill`); otherwise it uses
+all search terms joined with AND (`q.all`). Passages containing all query terms come first; a capped
+any-term pass fills the remaining slots. Both FTS
 paths limit candidates to 100 before joining metadata and applying the episode boost. Passages whose
 snippets share the same first 80 letters and digits collapse to one result, which removes repeated
 sponsor reads.
+
+Common conversational fillers (for example, `like`, `know`, `yeah`) are omitted from search and fill
+terms. A query containing only those fillers returns a helpful input error without a D1 scan.
 
 Why: on the full corpus, plain passage bm25 put sponsor reads in all top 3 slots for "portable agent
 memory switching models", and missed episode 49 for "Qwen summarization cost" because its transcript
@@ -270,12 +277,36 @@ Block query; 0.4 and 0.5 both matched, and 0.4 keeps more weight on the passage 
 The same script checks that `#t-2-1` in episode 75 resolves to segment index 3. Run against the
 3-episode fixture it fails and exits 1, which shows the check can fail.
 
+### Measured D1 reads (2026-10-14)
+
+Measured by the independent reviewer (Claude Opus) running the real `searchTranscripts` from
+b2c1432 (before) and 6220839 (after) against the same local full-corpus D1, summing rows read
+across every query a call makes. Limits 8 and 20 gave the same numbers. Times are local D1.
+
+| Query | Before | After the first fix pack |
+| --- | ---: | ---: |
+| "how do teams evaluate LLM agents in production" | 12,962 rows, 443 ms | 5,898 rows, 116 ms |
+| "open source versus closed models debate" | 8,496 rows, 313 ms | 3,885 rows, 77 ms |
+| 12 common words | 30,149 rows, 1,678 ms | 9,626 rows, 260 ms |
+| 12 rarely co-occurring stop words | 24,777 rows, 1,847 ms | 3 rows, 1 ms, 0 results |
+
+After the first fix pack the costliest single words were conversational fillers (`like` 7,410
+rows, `know` 5,442, `yeah` 3,270). The second fix pack drops fillers before any D1 work, so a
+filler-only query now returns an error without reading rows. A repeated identical query (case
+and spacing normalised) is served from the Cache API with no D1 reads (one `cache_match`,
+16 ms locally).
+
+Residual risk, accepted: a client that defeats the cache by adding a unique word to each query
+costs roughly 4K-10K rows per call. Under the mandatory WAF rule (10 requests per 10 seconds
+per IP), one IP could exhaust the 5M daily reads in well under an hour, and several IPs sooner.
+The effect is availability only until the UTC reset; the Free plan bills nothing.
+
 ## 7. Verification record (local, 2026-10-14)
 
-- Unit tests: 25 pass (`npx vitest run`), offline, synthetic data, node:sqlite with FTS5. They cover the
+- Unit tests: 36 pass (`npm test`), offline, synthetic data, node:sqlite with FTS5. They cover the
   sanitizer (including a seeded fuzz loop whose output runs as `MATCH` against real FTS5), input bounds,
-  formatting, ingest validation and hashing, SQL generation (idempotent re-run), the refresh logic with
-  a fake fetch, and the four tools.
+  filler-only searches without D1 work, workers.dev gating, formatting, ingest validation and hashing,
+  SQL generation (idempotent re-run), the refresh logic with a fake fetch, and the four tools.
 - Integration: 4 pass against `wrangler dev --local` with episodes 77, 38 and 2 in local D1, through both
   `@modelcontextprotocol/client@2.0.0` and the legacy `@modelcontextprotocol/sdk@1.30.0` client.
   Expected values are read from the real episode files at test time.
