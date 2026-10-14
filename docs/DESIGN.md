@@ -2,7 +2,8 @@
 
 This server is a read-only MCP endpoint over the Chain of Thought transcript archive. It runs as one
 Cloudflare Worker (`cot-archive-mcp`) with one D1 database (`cot-archive`). Search runs inside D1 through
-SQLite FTS5, so the Worker does little more than validate input, run one or two SQL queries and shape JSON.
+SQLite FTS5. The Worker validates input, runs bounded candidate queries and shapes JSON; an
+episode-filtered transcript search can use three D1 queries, including the existence check.
 
 Research date: 2026-10-14. Doc pages were read on that date; quotes below are from those pages.
 
@@ -93,13 +94,20 @@ budget, so the refresh path keeps the total number of statements under 15 either
 D1 pricing (https://developers.cloudflare.com/d1/platform/pricing/): Free plan includes 5 million rows
 read and 100,000 rows written per day. Since 2026-09-01, queries on the Free plan fail once the daily
 limit is reached (https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/).
+Reaching the D1 daily read cap is an outage until the UTC reset, not a protection for the endpoint.
 The full remote ingest is the only operation that writes a large number of rows; see the row counts in
 the final report and the note in DEPLOY.md.
 
 What this means for the design:
 
-- Search: one Worker invocation runs input validation, at most two D1 queries (all-terms, then
-  any-terms fill if needed) and JSON shaping. No transcript text is parsed in the Worker.
+- Search: each FTS path first limits scored candidates to 100 rows in a materialized CTE, then joins
+  and ranks those rows. An any-term fill uses at most four content terms, omits stop words, and runs
+  only if all-term results have not filled the requested limit. Transcript search also pre-limits
+  matching episode metadata before its ranking boost. A search uses one or two D1 statements, plus
+  an episode existence query when the episode filter is set. Successful tool results use the Workers
+  Cache API for one hour, keyed by normalized tool arguments without request headers.
+- Requests: POST `/mcp` bodies are capped at 8 KB even without a Content-Length header. JSON-RPC
+  batch arrays are rejected before the SDK handler, so one HTTP request cannot execute many tools.
 - Refresh: the cron fetches `corpus.json` (one subrequest) and at most one episode file (one more).
   Change detection compares stored canonical manifest strings, which costs about 0.3 ms for 77 entries
   in Node on this machine; parsing, hashing and preparing the largest episode file (152 KB) costs about
@@ -110,7 +118,10 @@ What this means for the design:
 - Request path measurement (`npm run bench`: the real `createMcpHandler` in Node over in-process SQLite
   with 3 real episodes, 50 runs after warmup, wall time, so it includes the SQL work that D1 does
   off-Worker in production): legacy `initialize` median 0.9 ms (p95 2.3 ms), `tools/list` median 1.2 ms
-  (p95 1.5 ms), `tools/call search_transcripts` median 1.3 ms (p95 2.2 ms). Cold start is not included.
+  (p95 1.5 ms), `tools/call search_transcripts` median 1.3 ms (p95 2.2 ms). These measurements used
+  only three episodes and predate the candidate bound. A full-corpus 12-word query took 334 ms in
+  node:sqlite before this fix, so the 1.3 ms figure does not describe full-corpus search. Cold start
+  is not included.
   Workers CPU time is not measurable inside `wrangler dev`, so treat these as estimates, and check
   `exceededCpu` in Workers metrics after deploy.
 
@@ -148,11 +159,9 @@ no Durable Objects, no sessions.
 - The GA changelog (2025-09-19) and the Workers pricing page do not state plan availability either.
 
 Decision: the docs do not confirm Free-plan availability, so the binding is not configured. The gap is
-covered in part by input caps (query <= 200 chars, limit <= 20, excerpts <= 16 segments) and by the
-Free plan's own ceilings (100,000 Worker requests per day; D1 daily row limits). DEPLOY.md describes two
-options: a WAF rate limiting rule (the Free zone plan includes 1 rule, counted per IP, 10-second period,
-matched on path; https://developers.cloudflare.com/waf/rate-limiting-rules/), or the Workers binding once
-availability is confirmed for the account.
+covered by input and body caps, bounded FTS candidates, cache reuse and the mandatory WAF rate rule
+in DEPLOY.md. The Free plan's daily D1 read limit is a failure threshold, not a rate control. The
+Workers binding remains an option only after confirming account support.
 
 ## 3. Dependencies
 
@@ -236,7 +245,8 @@ about 3.2 days, so corrections that do not touch the manifest are picked up with
 `search_transcripts` ranks passages with FTS5 `bm25(segments_fts, 1.0, 0.25)` (text weighted over
 speaker) plus `0.4 × bm25(episodes_fts, 8.0, 6.0, 3.0, 1.0)` for the passage's episode when the
 episode's title, guests, chapter titles or summary match the query (terms joined with OR). Passages
-containing all query terms come first; an any-term pass fills the remaining slots. Passages whose
+containing all query terms come first; a capped any-term pass fills the remaining slots. Both FTS
+paths limit candidates to 100 before joining metadata and applying the episode boost. Passages whose
 snippets share the same first 80 letters and digits collapse to one result, which removes repeated
 sponsor reads.
 

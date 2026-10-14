@@ -5,13 +5,53 @@ import { runRefresh } from "./refresh.ts";
 
 const list = (value: string): string[] => value.split(",").map(item => item.trim()).filter(Boolean);
 const plain = { "content-type": "text/plain; charset=utf-8" };
+const MAX_MCP_BODY = 8 * 1024;
+
+export async function boundedMcpRequest(request: Request): Promise<Request | Response> {
+  const length = request.headers.get("content-length");
+  if (length !== null && Number(length) > MAX_MCP_BODY) {
+    return new Response("MCP request body exceeds 8 KB", { status: 413, headers: plain });
+  }
+  const reader = request.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_MCP_BODY) {
+        await reader.cancel();
+        return new Response("MCP request body exceeds 8 KB", { status: 413, headers: plain });
+      }
+      chunks.push(value);
+    }
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    if (Array.isArray(JSON.parse(new TextDecoder().decode(body)))) {
+      return Response.json({
+        jsonrpc: "2.0", id: null,
+        error: { code: -32600, message: "JSON-RPC batch requests are not supported" },
+      }, { status: 400 });
+    }
+  } catch {
+    // The MCP handler reports malformed JSON using its existing protocol response.
+  }
+  return new Request(request, { body });
+}
 
 // Configures the stateless MCP handler with host and browser origin restrictions.
 export function mcpHandler(request: Request, env: Env) {
   const host = new URL(request.url).hostname;
   const local = localhostAllowedHostnames().includes(host);
   const workers = host.endsWith(".workers.dev");
-  return createMcpHandler(() => createServer(env), {
+  return createMcpHandler(() => createServer(env, new URL(request.url).origin), {
     route: "/mcp",
     ...(!local && !workers ? { allowedHostnames: list(env.MCP_HOSTNAMES) } : {}),
     allowedOriginHostnames: [
@@ -46,7 +86,11 @@ export default {
       if (url.pathname === "/health" && request.method === "GET") {
         return new Response("ok", { headers: plain });
       }
-      if (url.pathname === "/mcp") return mcpHandler(request, env)(request, env, ctx);
+      if (url.pathname === "/mcp") {
+        const bounded = request.method === "POST" ? await boundedMcpRequest(request) : request;
+        if (bounded instanceof Response) return bounded;
+        return mcpHandler(bounded, env)(bounded, env, ctx);
+      }
       return new Response("Not found", { status: 404, headers: plain });
     } catch (error) {
       console.error(JSON.stringify({

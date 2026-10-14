@@ -3,7 +3,7 @@ import type { EpisodeFile, ManifestEntry, Segment } from "./types.ts";
 
 export type SqlValue = string | number | null;
 
-const slugPattern = /^[a-z0-9-]{1,200}$/u;
+export const slugPattern = /^[a-z0-9-]{1,200}$/u;
 
 // Rejects malformed source data before either SQL builder or refresh writes it.
 export function validateEpisodeFile(
@@ -36,6 +36,24 @@ export function validateEpisodeFile(
   if (!Array.isArray(f.transcript)) throw new Error("Transcript must be an array");
   if (!Array.isArray(f.guests) || !Array.isArray(f.chapters)) {
     throw new Error("Guests and chapters must be arrays");
+  }
+  if (typeof f.title !== "string" || typeof f.summary !== "string") {
+    throw new Error(`Episode ${f.episode} has invalid title or summary`);
+  }
+  for (const [i, guest] of f.guests.entries()) {
+    if (!guest || typeof guest.name !== "string" || !guest.name.trim()
+      || (guest.company !== undefined && guest.company !== null
+        && typeof guest.company !== "string")) {
+      throw new Error(`Episode ${f.episode} guest ${i} has invalid fields`);
+    }
+  }
+  for (const [i, chapter] of f.chapters.entries()) {
+    if (!chapter || (chapter.time !== null && typeof chapter.time !== "string")
+      || (chapter.seconds !== null && (typeof chapter.seconds !== "number"
+        || !Number.isFinite(chapter.seconds)))
+      || typeof chapter.label !== "string" || !chapter.label.trim()) {
+      throw new Error(`Episode ${f.episode} chapter ${i} has invalid fields`);
+    }
   }
 
   for (const [i, segment] of f.transcript.entries()) {

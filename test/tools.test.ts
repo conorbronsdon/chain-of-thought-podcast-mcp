@@ -106,6 +106,15 @@ it("collapses identical passages repeated across episodes", async () => {
       query: "portable memory", limit: 8,
     })).results;
     expect(results).toHaveLength(1);
+    expect(local.preparedSql.filter(sql => sql.includes("segments_fts MATCH")))
+      .toHaveLength(2);
+    const start = local.preparedSql.length;
+    const small = (await searchTranscripts(d1(local), {
+      query: "portable memory", limit: 2,
+    })).results;
+    expect(small).toHaveLength(1);
+    expect(local.preparedSql.slice(start).filter(sql => sql.includes("segments_fts MATCH")))
+      .toHaveLength(1);
   } finally {
     local.close();
   }
@@ -121,6 +130,32 @@ it("searches episodes with folded diacritics and chapters", async () => {
   const chapters = (await searchEpisodes(d1(shim), { query: "multi-agent", limit: 8 }))
     .results.find(row => row.episode === 2)?.matching_chapters;
   expect(chapters).toEqual([{ time: "0:00", label: "Multi-agent teams" }]);
+  const guide = (await searchEpisodes(d1(shim), { query: "a guide to evals", limit: 8 }))
+    .results;
+  expect(guide.every(row => row.matching_chapters.length === 0)).toBe(true);
+});
+
+it("matches chapters on content words with boundaries rather than stop words", async () => {
+  const episode = structuredClone(files[0]);
+  episode.title = "A guide to evals";
+  episode.chapters = [
+    { time: "0:00", seconds: 0, label: "How to use models" },
+    { time: "0:10", seconds: 10, label: "Evaluations in practice" },
+    { time: "0:20", seconds: 20, label: "Evals for agents" },
+  ];
+  const local = new D1Shim();
+  try {
+    await local.exec(await generateSql(manifest([episode]), [episode], {
+      now: "2026-01-02T00:00:00.000Z",
+    }));
+    const result = (await searchEpisodes(d1(local), { query: "a guide to evals", limit: 8 }))
+      .results[0];
+    expect(result.matching_chapters).toEqual([
+      { time: "0:20", label: "Evals for agents" },
+    ]);
+  } finally {
+    local.close();
+  }
 });
 
 it("runs one FTS query for one search term in each search tool", async () => {
@@ -132,6 +167,25 @@ it("runs one FTS query for one search term in each search tool", async () => {
   await searchEpisodes(d1(shim), { query: "memory", limit: 8 });
   expect(shim.preparedSql.slice(next).filter(sql => sql.includes("episodes_fts MATCH")))
     .toHaveLength(1);
+});
+
+it("limits FTS candidates before joins and skips fill when all terms fill the limit", async () => {
+  const start = shim.preparedSql.length;
+  await searchTranscripts(d1(shim), { query: "portable memory", limit: 1 });
+  const statements = shim.preparedSql.slice(start);
+  expect(statements.filter(sql => sql.includes("segments_fts MATCH"))).toHaveLength(1);
+  expect(statements[0]).toMatch(/WITH hits AS MATERIALIZED[\s\S]*ORDER BY score LIMIT \?/u);
+  const next = shim.preparedSql.length;
+  await searchEpisodes(d1(shim), { query: "portable memory", limit: 1 });
+  expect(shim.preparedSql.slice(next).filter(sql => sql.includes("episodes_fts MATCH")))
+    .toHaveLength(1);
+});
+
+it("does not throw when stored chapters have a missing label", async () => {
+  shim.sqlite.prepare("UPDATE episodes SET chapters_json = ? WHERE episode = 2")
+    .run('[{"time":"0:00","seconds":0}]');
+  const result = await searchEpisodes(d1(shim), { query: "multi-agent", limit: 8 });
+  expect(result.results.find(row => row.episode === 2)?.matching_chapters).toEqual([]);
 });
 
 it("returns episode metadata and bounded excerpt", async () => {
@@ -167,6 +221,8 @@ it("returns episode metadata and bounded excerpt", async () => {
   })).rejects.toBeInstanceOf(ToolInputError);
   await expect(getEpisode(d1(shim), { episode: 999 }))
     .rejects.toThrow(/No episode 999/u);
+  await expect(getEpisode(d1(shim), { slug: "https://" }))
+    .rejects.toBeInstanceOf(ToolInputError);
 });
 
 it("resolves stored compound anchors and URLs without confusing them with indexes", async () => {

@@ -54,6 +54,7 @@ const noWords = "The query has no searchable words. Use plain words, names or nu
 // A passage is more likely to answer the query when its episode title, guests,
 // chapters or summary also match.
 const EPISODE_MATCH_WEIGHT = 0.4;
+const FTS_CANDIDATES = 100;
 const guests = (json: string): Guest[] => JSON.parse(json) as Guest[];
 const chapters = (json: string): Chapter[] => JSON.parse(json) as Chapter[];
 const range = (episode: number): [number, number] => [
@@ -69,25 +70,30 @@ export async function searchTranscripts(db: D1Database, input: SearchInput) {
   // Fetch extra candidates so repeated passages do not exhaust the result limit.
   const find = async (match: string): Promise<TranscriptRow[]> => {
     const sql = `
-      WITH ep AS (
+      WITH hits AS MATERIALIZED (
+        SELECT rowid, bm25(segments_fts, 1.0, 0.25) AS score,
+          snippet(segments_fts, 0, '', '', '…', 64) AS excerpt
+        FROM segments_fts WHERE segments_fts MATCH ?
+          ${input.episode === undefined ? "" : "AND rowid BETWEEN ? AND ?"}
+        ORDER BY score LIMIT ?
+      ), ep AS MATERIALIZED (
         SELECT rowid AS episode, bm25(episodes_fts, 8.0, 6.0, 3.0, 1.0) AS escore
-        FROM episodes_fts WHERE episodes_fts MATCH ?
+        FROM episodes_fts WHERE episodes_fts MATCH ? ORDER BY escore LIMIT ?
       )
       SELECT s.id, s.episode, s.idx, s.time, s.seconds, s.speaker, s.url,
         CASE WHEN length(s.text) <= 600 THEN s.text
-          ELSE snippet(segments_fts, 0, '', '', '…', 64) END AS snippet,
-        bm25(segments_fts, 1.0, 0.25)
+          ELSE hits.excerpt END AS snippet,
+        hits.score
           + ${EPISODE_MATCH_WEIGHT} * coalesce(ep.escore, 0) AS score,
         e.title, e.canonical_url, e.guests_json, e.published_at
-      FROM segments_fts
-      JOIN segments s ON s.id = segments_fts.rowid
+      FROM hits
+      JOIN segments s ON s.id = hits.rowid
       JOIN episodes e ON e.episode = s.episode
       LEFT JOIN ep ON ep.episode = s.episode
-      WHERE segments_fts MATCH ?
-        ${input.episode === undefined ? "" : "AND segments_fts.rowid BETWEEN ? AND ?"}
       ORDER BY score LIMIT ?`;
-    const args: (string | number)[] = [q.any, match];
+    const args: (string | number)[] = [match];
     if (input.episode !== undefined) args.push(...range(input.episode));
+    args.push(FTS_CANDIDATES, q.fill ?? q.all, FTS_CANDIDATES);
     args.push(Math.min(input.limit * 3, 60));
     return (await db.prepare(sql).bind(...args).all<TranscriptRow>()).results;
   };
@@ -108,8 +114,8 @@ export async function searchTranscripts(db: D1Database, input: SearchInput) {
   };
   add(all, "all_terms");
   // A single term has the same all and any query, so no fill query is needed.
-  if (q.all !== q.any && rows.length < input.limit) {
-    add(await find(q.any), "some_terms");
+  if (q.fill && all.length < input.limit && rows.length < input.limit) {
+    add(await find(q.fill), "some_terms");
   }
 
   const results = rows.map(({ r, match }) => ({
@@ -147,18 +153,23 @@ export async function searchEpisodes(db: D1Database, input: SearchInput) {
   // Column weights favor titles and guest names over summaries.
   const find = async (match: string): Promise<EpisodeSearchRow[]> => {
     const sql = `
-      SELECT e.*, bm25(episodes_fts, 8.0, 6.0, 3.0, 1.0) AS score
-      FROM episodes_fts JOIN episodes e ON e.episode = episodes_fts.rowid
-      WHERE episodes_fts MATCH ? ORDER BY score LIMIT ?`;
-    return (await db.prepare(sql).bind(match, input.limit).all<EpisodeSearchRow>()).results;
+      WITH hits AS MATERIALIZED (
+        SELECT rowid, bm25(episodes_fts, 8.0, 6.0, 3.0, 1.0) AS score
+        FROM episodes_fts WHERE episodes_fts MATCH ? ORDER BY score LIMIT ?
+      )
+      SELECT e.*, hits.score FROM hits
+      JOIN episodes e ON e.episode = hits.rowid
+      ORDER BY hits.score LIMIT ?`;
+    return (await db.prepare(sql).bind(match, FTS_CANDIDATES, input.limit)
+      .all<EpisodeSearchRow>()).results;
   };
 
   const all = await find(q.all);
   const seen = new Set(all.map(row => row.episode));
   const rows = all.map(row => ({ r: row, match: "all_terms" }));
   // A single term has the same all and any query, so no fill query is needed.
-  if (q.terms.length > 1 && rows.length < input.limit) {
-    for (const row of await find(q.any)) {
+  if (q.fill && rows.length < input.limit) {
+    for (const row of await find(q.fill)) {
       if (seen.has(row.episode)) continue;
       rows.push({ r: row, match: "some_terms" });
       seen.add(row.episode);
@@ -166,8 +177,12 @@ export async function searchEpisodes(db: D1Database, input: SearchInput) {
     }
   }
 
-  const runs = (input.query.normalize("NFKC").match(/[\p{L}\p{N}\p{Co}]+/gu) ?? [])
-    .map(fold);
+  const runs = q.contentTerms.map(fold);
+  const matchesChapter = (label: unknown) => {
+    if (typeof label !== "string") return false;
+    const words = fold(label).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(" ");
+    return runs.some(term => ` ${words} `.includes(` ${term} `));
+  };
   return {
     query: input.query,
     results: rows.map(({ r, match }) => ({
@@ -177,7 +192,7 @@ export async function searchEpisodes(db: D1Database, input: SearchInput) {
       guests: guestStrings(guests(r.guests_json)),
       summary: cap(r.summary, 399),
       matching_chapters: chapters(r.chapters_json)
-        .filter(chapter => runs.some(term => fold(chapter.label).includes(term)))
+        .filter(chapter => matchesChapter(chapter?.label))
         .slice(0, 3)
         .map(chapter => ({ time: chapter.time, label: chapter.label })),
       match,
@@ -192,7 +207,12 @@ export async function searchEpisodes(db: D1Database, input: SearchInput) {
 export function normalizeSlug(value: string): string {
   let slug = value;
   if (value.startsWith("https://")) {
-    const url = new URL(value);
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new ToolInputError("The episode URL is invalid. Use a chainofthought.show episode URL or slug.");
+    }
     if (url.hostname !== "chainofthought.show" || !url.pathname.startsWith("/podcast/")) {
       throw new ToolInputError("Use a chainofthought.show episode URL or slug.");
     }

@@ -40,3 +40,24 @@ it("accepts paired null timestamps and hashes them deterministically", async () 
   copy.transcript[0].seconds = 0;
   expect(await contentHash(copy)).not.toBe(await contentHash(nullTimeEpisode));
 });
+
+it("rejects malformed metadata before it reaches episode search", () => {
+  const badTitle = structuredClone(files[0]) as unknown as Record<string, unknown>;
+  badTitle.title = null;
+  expect(() => validateEpisodeFile(badTitle)).toThrow(/title or summary/u);
+  const badSummary = structuredClone(files[0]) as unknown as Record<string, unknown>;
+  badSummary.summary = 1;
+  expect(() => validateEpisodeFile(badSummary)).toThrow(/title or summary/u);
+  const badChapter = structuredClone(files[0]);
+  badChapter.chapters[0].label = "";
+  expect(() => validateEpisodeFile(badChapter)).toThrow(/chapter 0/u);
+  const missingLabel = structuredClone(files[0]) as unknown as { chapters: Record<string, unknown>[] };
+  delete missingLabel.chapters[0].label;
+  expect(() => validateEpisodeFile(missingLabel)).toThrow(/chapter 0/u);
+  const badGuest = structuredClone(files[0]);
+  badGuest.guests[0].name = " ";
+  expect(() => validateEpisodeFile(badGuest)).toThrow(/guest 0/u);
+  const noCompany = structuredClone(files[0]);
+  delete noCompany.guests[0].company;
+  expect(() => validateEpisodeFile(noCompany)).not.toThrow();
+});

@@ -24,12 +24,12 @@ export interface Manifest {
 
 export interface Guest {
   name: string;
-  company: string | null;
+  company?: string | null;
 }
 
 export interface Chapter {
-  time: string;
-  seconds: number;
+  time: string | null;
+  seconds: number | null;
   label: string;
 }
 

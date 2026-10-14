@@ -11,7 +11,9 @@ const STOP = new Set([
 export function buildFtsQuery(input: string): {
   all: string;
   any: string;
+  fill: string | null;
   terms: string[];
+  contentTerms: string[];
 } | null {
   const words = Array.from(input.normalize("NFKC")).slice(0, 200).join("").split(/\s+/u);
   const raw: string[] = [];
@@ -25,5 +27,13 @@ export function buildFtsQuery(input: string): {
   const hasContent = raw.some(x => x.includes(" ") || !STOP.has(x));
   const useful = hasContent ? raw.filter(x => x.includes(" ") || !STOP.has(x)) : raw;
   const terms = [...new Set(useful.map(x => `"${x}"`))].slice(0, 12);
-  return terms.length ? { all: terms.join(" "), any: terms.join(" OR "), terms } : null;
+  const fillTerms = [...new Set(raw.filter(x => x.includes(" ") || !STOP.has(x)))]
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 4)
+    .map(x => `"${x}"`);
+  return terms.length ? {
+    all: terms.join(" "), any: terms.join(" OR "),
+    fill: fillTerms.length > 1 ? fillTerms.join(" OR ") : null,
+    terms, contentTerms: [...new Set(raw.filter(x => x.includes(" ") || !STOP.has(x)))],
+  } : null;
 }

@@ -82,18 +82,48 @@ const descriptions = {
 };
 
 // Registers read-only tools and logs outcomes without recording query text.
-export function createServer(env: Env): McpServer {
+export function createServer(env: Env, cacheOrigin: string): McpServer {
   const server = new McpServer(
     { name: "chain-of-thought-podcast", version: "0.1.0" },
     { instructions },
   );
 
-  const wrap = async (tool: string, run: () => Promise<unknown>) => {
+  const wrap = async (tool: string, args: Record<string, unknown>, run: () => Promise<unknown>) => {
     const start = performance.now();
     let ok = false;
     let results = 0;
     try {
-      const value = await run();
+      // Tool arguments have already passed the schemas and include default limits.
+      // Cache only successful results. The key contains no headers or client identity.
+      const query = typeof args.query === "string"
+        ? args.query.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase()
+        : undefined;
+      const key = new Request(`${cacheOrigin}/__mcp_cache/${tool}?${new URLSearchParams({
+        query: query ?? "",
+        limit: String(args.limit ?? ""),
+        episode: String(args.episode ?? ""),
+        slug: String(args.slug ?? ""),
+        at: String(args.at ?? ""),
+        before: String(args.before ?? ""),
+        after: String(args.after ?? ""),
+      })}`);
+      const cache = typeof caches === "undefined" ? undefined
+        : (caches as CacheStorage & { default: Cache }).default;
+      let cached: Response | undefined;
+      try {
+        cached = await cache?.match(key);
+      } catch {
+        // Cache misses and cache service failures must not break the archive.
+      }
+      const value = cached ? await cached.json() : await run();
+      if (!cached && cache) {
+        await cache.put(key, new Response(JSON.stringify(value), {
+          headers: { "Cache-Control": "public, max-age=3600" },
+        })).catch(() => {});
+      }
+      if (query !== undefined && value && typeof value === "object") {
+        (value as { query?: string }).query = args.query as string;
+      }
       ok = true;
       if (value && typeof value === "object" && "results" in value
         && Array.isArray(value.results)) {
@@ -138,28 +168,28 @@ export function createServer(env: Env): McpServer {
     description: descriptions.searchTranscripts,
     inputSchema: searchTranscriptsSchema,
     annotations,
-  }, args => wrap("search_transcripts", () => searchTranscripts(env.DB, args)));
+  }, args => wrap("search_transcripts", args, () => searchTranscripts(env.DB, args)));
 
   server.registerTool("search_episodes", {
     title: "Search episodes",
     description: descriptions.searchEpisodes,
     inputSchema: searchEpisodesSchema,
     annotations,
-  }, args => wrap("search_episodes", () => searchEpisodes(env.DB, args)));
+  }, args => wrap("search_episodes", args, () => searchEpisodes(env.DB, args)));
 
   server.registerTool("get_episode", {
     title: "Get episode",
     description: descriptions.getEpisode,
     inputSchema: getEpisodeSchema,
     annotations,
-  }, args => wrap("get_episode", () => getEpisode(env.DB, args)));
+  }, args => wrap("get_episode", args, () => getEpisode(env.DB, args)));
 
   server.registerTool("get_transcript_excerpt", {
     title: "Get transcript excerpt",
     description: descriptions.getTranscriptExcerpt,
     inputSchema: getExcerptSchema,
     annotations,
-  }, args => wrap("get_transcript_excerpt", () => getTranscriptExcerpt(env.DB, args)));
+  }, args => wrap("get_transcript_excerpt", args, () => getTranscriptExcerpt(env.DB, args)));
 
   return server;
 }

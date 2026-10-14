@@ -69,7 +69,14 @@ These steps are for Conor. Nothing here has been run yet. Run them in order.
 
    The Free plan allows five cron triggers per account. To stop refreshes, set `REFRESH_ENABLED` to `"false"` and deploy. A manual full refresh repeats step 3; the import is idempotent.
 
-8. **Consider rate limiting.** A Free zone plan allows one WAF rate limiting rule, counted per IP with a 10-second period and 10-second mitigation timeout. Its expression can match the `/mcp` path using Path and Verified Bot fields. The commented Workers rate limit binding in `wrangler.jsonc` is another option after confirming support for this account; the Worker code would also need to call it.
+8. **Create the WAF rate limiting rule before publishing the endpoint in steps 9-10.** In the
+   `chainofthought.show` zone, create the Free plan's one rate limiting rule with expression
+   `(http.request.uri.path eq "/mcp")`, counting **per IP address**, threshold **10 requests per
+   10 seconds**, and mitigation **Block for 10 seconds**. Enable it and verify it applies to
+   `mcp.chainofthought.show`. A request can still consume D1 reads; the 5-million-row daily read
+   limit causes an outage when reached. The Worker also rejects batches and oversized bodies, bounds
+   search candidates, and caches repeated tool results, but the WAF rule limits distinct queries
+   from one IP before directory traffic begins.
 
 9. **Publish to the MCP Registry.** Install `mcp-publisher` using one of these commands, then authenticate and publish from the repo root, which holds `server.json`.
 

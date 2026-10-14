@@ -137,6 +137,36 @@ it("deletes one removed episode when 90 percent of the manifest remains", async 
   shim.close();
 });
 
+it("rejects renumbered and malformed manifests without deleting stored episodes", async () => {
+  const shim = new D1Shim();
+  await shim.exec(await generateSql(manifest(), files, {
+    now: "2026-01-01T00:00:00.000Z",
+  }));
+  const renamed = manifest();
+  renamed.episodes = renamed.episodes.map(entry => ({ ...entry, episode: entry.episode + 1000 }));
+  for (let i = 0; i < 3; i++) {
+    const result = await runRefresh({ db: d1(shim), fetch: fake(renamed, files), now, baseUrl });
+    expect(result.action).not.toBe("deleted");
+  }
+  expect(shim.sqlite.prepare("SELECT count(*) AS n FROM episodes").get())
+    .toMatchObject({ n: 3 });
+  const missingDate = manifest();
+  delete (missingDate as unknown as Record<string, unknown>).dataUpdatedAt;
+  expect(await runRefresh({ db: d1(shim), fetch: fake(missingDate, files), now, baseUrl }))
+    .toMatchObject({ action: "error", reason: "manifest" });
+  const duplicate = manifest();
+  duplicate.episodes[1].episode = duplicate.episodes[0].episode;
+  expect(await runRefresh({ db: d1(shim), fetch: fake(duplicate, files), now, baseUrl }))
+    .toMatchObject({ action: "error", reason: "manifest" });
+  const badSlug = manifest();
+  badSlug.episodes[0].slug = "Bad Slug";
+  expect(await runRefresh({ db: d1(shim), fetch: fake(badSlug, files), now, baseUrl }))
+    .toMatchObject({ action: "error", reason: "manifest" });
+  expect(shim.sqlite.prepare("SELECT count(*) AS n FROM episodes").get())
+    .toMatchObject({ n: 3 });
+  shim.close();
+});
+
 it("keeps null timestamps through build SQL, refresh, search and excerpts", async () => {
   const shim = new D1Shim();
   const original = nullTimeEpisode;

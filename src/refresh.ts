@@ -3,6 +3,7 @@ import {
   contentHash,
   episodeJsonUrl,
   episodeRow,
+  slugPattern,
   validateEpisodeFile,
 } from "./ingest.ts";
 import { EPISODE_COLUMNS } from "./schema.ts";
@@ -77,8 +78,19 @@ export async function runRefresh(
       || !Array.isArray(manifest.episodes)
       || !manifest.counts
       || manifest.counts.episodes !== manifest.episodes.length
+      || typeof manifest.dataUpdatedAt !== "string"
+      || !manifest.dataUpdatedAt.trim()
     ) {
       throw new Error("Invalid manifest schema or counts");
+    }
+    const numbers = new Set<number>();
+    for (const entry of manifest.episodes) {
+      if (!entry || !Number.isSafeInteger(entry.episode) || entry.episode < 1
+        || numbers.has(entry.episode) || typeof entry.slug !== "string"
+        || !slugPattern.test(entry.slug)) {
+        throw new Error("Invalid or duplicate manifest episode entry");
+      }
+      numbers.add(entry.episode);
     }
   } catch (error) {
     return manifestError(error);
@@ -102,7 +114,8 @@ export async function runRefresh(
   const old = new Map(stored.map(row => [row.episode, row]));
   const eligible = (episode: number) => !failures[String(episode)]
     || now.getTime() - new Date(failures[String(episode)]).getTime() >= 6 * 3600 * 1000;
-  const removed = manifest.episodes.length >= stored.length * 0.9
+  const retained = stored.filter(row => byNumber.has(row.episode)).length;
+  const removed = retained >= stored.length * 0.9
     ? stored.filter(row => !byNumber.has(row.episode) && eligible(row.episode))
       .sort((a, b) => a.episode - b.episode)[0]
     : undefined;

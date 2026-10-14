@@ -14,6 +14,11 @@ describe("FTS sanitizer", () => {
     expect(buildFtsQuery("AND OR NOT")?.all).toBe('"and" "or" "not"');
     expect(buildFtsQuery("GPT 5")?.terms).toEqual(['"gpt"', '"5"']);
     expect(buildFtsQuery("a b c 5")?.terms).toEqual(['"5"']);
+    expect(buildFtsQuery("a guide to evals")?.contentTerms).toEqual(["guide", "evals"]);
+    expect(buildFtsQuery("AND OR NOT")?.fill).toBeNull();
+    const broad = buildFtsQuery("a how to in guide evals production reliability benchmarking agents")!;
+    expect(broad.fill?.split(" OR ")).toHaveLength(4);
+    expect(broad.fill).not.toMatch(/"a"|"how"|"to"|"in"/u);
   });
 
   it("never emits invalid MATCH syntax for hostile or fuzzed text", () => {
