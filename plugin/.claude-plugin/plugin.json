@@ -1,0 +1,12 @@
+{
+  "name": "chain-of-thought-podcast",
+  "description": "Search and cite the Chain of Thought podcast archive through its remote MCP server.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Conor Bronsdon"
+  },
+  "homepage": "https://chainofthought.show/for-agents/",
+  "repository": "https://github.com/conorbronsdon/chain-of-thought-podcast-mcp",
+  "license": "MIT",
+  "keywords": ["podcast", "transcripts", "AI", "MCP", "research"]
+}

@@ -45,6 +45,19 @@ These steps follow each vendor's docs as of 2026-10-14. The endpoint must be dep
 
 ### Claude Code
 
+#### Install in Claude Code
+
+In a Claude Code session, add this repository as a plugin marketplace and install the plugin:
+
+```text
+/plugin marketplace add conorbronsdon/chain-of-thought-podcast-mcp
+/plugin install chain-of-thought-podcast@chain-of-thought-podcast-mcp
+```
+
+The plugin connects to the public remote MCP endpoint without an API key. Its optional `/chain-of-thought-podcast:cite-chain-of-thought` skill helps find and cite podcast discussions.
+
+#### Add the MCP server directly
+
 Run the [Claude Code MCP command](https://code.claude.com/docs/en/mcp):
 
 ```sh

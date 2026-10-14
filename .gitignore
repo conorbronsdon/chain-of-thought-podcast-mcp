@@ -5,3 +5,6 @@ dist/
 .cache/
 .codex/
 *.log
+
+# mcp-publisher login writes credentials into the working directory
+.mcpregistry_*

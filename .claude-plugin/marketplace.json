@@ -1,0 +1,14 @@
+{
+  "name": "chain-of-thought-podcast-mcp",
+  "description": "Claude Code plugin for the Chain of Thought podcast archive.",
+  "owner": {
+    "name": "Conor Bronsdon"
+  },
+  "plugins": [
+    {
+      "name": "chain-of-thought-podcast",
+      "source": "./plugin",
+      "description": "Search and cite the Chain of Thought podcast archive."
+    }
+  ]
+}
