@@ -88,6 +88,10 @@ Add this to `.cursor/mcp.json` for a project or `~/.cursor/mcp.json` globally, f
 
 Open [ChatGPT plugins](https://chatgpt.com/plugins), select the plus button, then **Add custom MCP server**. Enter `chain-of-thought` and a description. Under Connection, enter `https://mcp.chainofthought.show/mcp`. Configure authentication (this server needs none), review the risk warning, select **I understand and want to continue**, then **Create as a plugin** and review the discovered tools. A public HTTPS endpoint is required; account and workspace policies apply. See the [OpenAI connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt).
 
+### OpenAI plugin ZIP
+
+Build the ChatGPT/Codex upload with `npm run package:openai`. See [OPENAI_PLUGIN.md](OPENAI_PLUGIN.md) for validation, brand provenance, ZIP contents, and submission steps.
+
 ## Citing and usage terms
 
 The source corpus states:

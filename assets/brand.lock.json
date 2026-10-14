@@ -1,0 +1,26 @@
+{
+  "repo": "cot-brand",
+  "commit": "04be9756be5832975cbb598f7d4587c9bfc8f053",
+  "hashNormalization": "CRLF to LF",
+  "assets": [
+    {
+      "path": "assets/brand/cot-mark-white-yellow.svg",
+      "source": "logo/svg/cot-mark-white-yellow.svg",
+      "sha256": "c58d7039519ab53ac62771fccacf54ac525195a832ceaf1b575e6ad9442e9856",
+      "status": "secondary"
+    },
+    {
+      "path": "assets/brand/cot-stacked-plate-dark.svg",
+      "source": "logo/svg/cot-stacked-plate-dark.svg",
+      "sha256": "5059183e1ec51e5be103f4ca63f7fcea35f08b53a541ad6b5e7b15316e67a955",
+      "status": "approved"
+    },
+    {
+      "path": "assets/brand/tokens.json",
+      "source": "tokens.json",
+      "sha256": "190b8cca8f7ceea35490dbe9d247554075a0471be988657391db1976d2b27086",
+      "status": "approved",
+      "sourceSha256": "00c426354a29d1c93e873e0375715aa8f87b8574e1ff37997cac4023461bf222"
+    }
+  ]
+}
