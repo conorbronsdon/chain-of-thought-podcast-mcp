@@ -203,7 +203,7 @@ export async function runRefresh(
 
     const response = await fetcher(episodeJsonUrl(entry, baseUrl), { headers });
     if (response.status === 304 && previous) {
-      return finish({ action: "checked", episode: entry.episode, reason: "not_modified" }, [
+      return await finish({ action: "checked", episode: entry.episode, reason: "not_modified" }, [
         db.prepare("UPDATE episodes SET checked_at = ? WHERE episode = ?")
           .bind(iso, entry.episode),
         ...pendingAfter(entry.episode),
@@ -221,7 +221,7 @@ export async function runRefresh(
       && hash === previous.content_hash
       && previous.manifest_entry === canonicalManifestEntry(entry)
     ) {
-      return finish({ action: "checked", episode: entry.episode, reason: "content_unchanged" }, [
+      return await finish({ action: "checked", episode: entry.episode, reason: "content_unchanged" }, [
         db.prepare("UPDATE episodes SET checked_at = ?, etag = ? WHERE episode = ?")
           .bind(iso, etag, entry.episode),
         ...pendingAfter(entry.episode),
@@ -285,7 +285,7 @@ export async function runRefresh(
       ))),
       ...pendingAfter(n),
     ];
-    return finish({
+    return await finish({
       action: "ingested",
       episode: n,
       reason: previous && reason === "round_robin" ? "content_changed" : reason,

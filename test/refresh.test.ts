@@ -200,3 +200,26 @@ it("keeps null timestamps through build SQL, refresh, search and excerpts", asyn
   expect(byTime.anchor).toMatchObject({ segment_index: 2, time: "0:20" });
   shim.close();
 });
+
+it("records a failed ingest batch so the episode backs off", async () => {
+  const shim = new D1Shim();
+  await shim.exec(SCHEMA);
+  const source = manifest();
+  const batch = shim.batch.bind(shim);
+  let failIngest = true;
+  shim.batch = async statements => {
+    if (failIngest && statements.length > 4) throw new Error("D1 batch failed");
+    return batch(statements);
+  };
+  expect(await runRefresh({ db: d1(shim), fetch: fake(source, files), now, baseUrl }))
+    .toMatchObject({ action: "error", episode: 77, reason: "episode_failure" });
+  const meta = Object.fromEntries((shim.sqlite.prepare("SELECT key, value FROM meta").all() as
+    { key: string; value: string }[]).map(row => [row.key, row.value]));
+  expect(JSON.parse(meta.refresh_failures)).toEqual({ 77: now.toISOString() });
+  expect(meta.refresh_last_error).toBe("D1 batch failed");
+  failIngest = false;
+  expect(await runRefresh({
+    db: d1(shim), fetch: fake(source, files), now: new Date("2026-01-03T01:00:00.000Z"), baseUrl,
+  })).toMatchObject({ action: "ingested", episode: 38 });
+  shim.close();
+});
