@@ -41,7 +41,9 @@ same data and is not needed.
 - attribution: "Chain of Thought — chainofthought.show"
 - canonical: "Every record carries canonicalUrl. Cite that page, not this endpoint: it is the authoritative rendering and the one that gets corrected."
 - transcripts: "Machine-generated (ASR), with entity corrections applied during sync. Transcripts may contain errors; verify quotations against the recording."
-- redistribution: "This endpoint grants no additional licence to redistribute transcript text as a dataset or corpus. Link to and cite the episode page."
+- license: "CC-BY-4.0"
+- audio: "Episode audio and video are not licensed: all rights reserved. The audio and video URLs are links only; link to the episode page instead of copying the media."
+- redistribution: "Transcript text and episode metadata are licensed CC BY 4.0 and published as a dataset at https://huggingface.co/datasets/conorbronsdon/chain-of-thought-podcast-transcripts. Credit Chain of Thought (chainofthought.show) and link the episode page."
 
 How the server respects them: every result carries the canonical URL (per-segment `#t-N` deep links for
 transcript passages) and a `cite` string; snippets are capped near 600 characters; excerpts are capped at
