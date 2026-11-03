@@ -8,7 +8,7 @@ Use Node 22.18 or newer, from this repository:
 
 ```sh
 npm run validate:openai
-node --test --experimental-test-isolation=none scripts/openai-plugin.test.mjs
+npm run test:openai
 npm run package:openai
 ```
 
@@ -16,7 +16,7 @@ Packaging needs no npm dependencies. The output is `dist/openai-plugin.zip`. A f
 
 Validation parses packaged JSON, checks required fields, HTTPS URLs, listing limits, references, icon dimensions, contrast, brand hashes, and skill frontmatter. It rejects symlinks, unknown manifest fields, and credential-bearing MCP configurations. It packages the exact bytes it validated. ZIP paths, permissions, timestamps, ordering, and compression are deterministic.
 
-Run the server's existing tests with `npm test` when node_modules is present. Local checks do not replace OpenAI's scans or prove live endpoint availability.
+`npm test` runs this plugin suite after the server's vitest suite, and `npm run check` adds typecheck and `validate:openai`; both need node_modules. Local checks do not replace OpenAI's scans or prove live endpoint availability.
 
 ## Official format checked 2026-10-14
 

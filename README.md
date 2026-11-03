@@ -122,9 +122,10 @@ Use Node 22.18 or newer:
 
 ```sh
 npm ci
-npm test
-npm run typecheck
+npm run check
 ```
+
+`npm run check` runs `typecheck`, `npm test` and `validate:openai`. `npm test` runs the vitest suite (`test:unit`) and then the OpenAI plugin `node:test` suite (`test:openai`). The [CI workflow](.github/workflows/ci.yml) runs `npm run check` on every pull request and on pushes to `main`. The fixture integration suite below runs in CI only when you start the workflow by hand with **integration** ticked. For a filtered unit run, use `npm run test:unit -- <filter>` (for example, `npm run test:unit -- test/tools.test.ts`); arguments appended to `npm test` go to the final plugin test runner.
 
 For the three-episode fixture, run these in order, with `dev:fixture` kept running for the integration test:
 
