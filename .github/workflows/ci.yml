@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      integration:
+        description: "Also run the fixture integration suite (reads the public corpus, local D1 only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck, tests, OpenAI plugin validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18"
+          cache: npm
+      - run: npm ci
+      # typecheck, vitest, the OpenAI plugin node:test suite, validate:openai
+      - run: npm run check
+
+  integration:
+    name: fixture integration suite (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.integration
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.18"
+          cache: npm
+      - run: npm ci
+      - run: npm run build-sql:fixture
+      - run: npm run db:fixture
+      - name: Start wrangler dev
+        run: |
+          npm run dev:fixture > wrangler-dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8787/health && exit 0
+            sleep 1
+          done
+          cat wrangler-dev.log
+          exit 1
+      - run: npm run test:integration
+        env:
+          MCP_URL: http://127.0.0.1:8787/mcp
