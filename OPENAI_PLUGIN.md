@@ -50,7 +50,7 @@ Follow [OpenAI's submission guide](https://developers.openai.com/plugins/deploy/
 
 Only organization owners or members with Apps Management Write can submit. The directory's developer name comes from the verified identity; confirm it matches Chain of Thought.
 
-The domain challenge requires hosting the exact portal token at its displayed HTTPS URL ending in /.well-known/openai-apps-challenge. This is a separate deployment step; no token is bundled here.
+The domain challenge requires hosting the exact portal token at its displayed HTTPS URL ending in /.well-known/openai-apps-challenge. No token is bundled here. Set it as the `OPENAI_APPS_CHALLENGE` Worker secret, and remove it after verification; see [the domain challenge runbook](DEPLOY.md#openai-app-directory-domain-challenge).
 
 Suggested review cases (proposed, not recorded as passed):
 
