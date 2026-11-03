@@ -241,8 +241,8 @@ The manifest has no per-episode timestamp or hash, so the server stores:
 
 Each run handles at most one episode, in this order: a removed episode (only when the manifest looks
 complete), a new episode (highest number first), an episode whose manifest entry changed, then a
-round-robin check of the episode with the oldest `checked_at`. Hourly runs re-verify all 77 episodes in
-about 3.2 days, so corrections that do not touch the manifest are picked up within that window.
+round-robin check of the episode with the oldest `checked_at`. Hourly runs re-verify all N episodes in
+about N/24 days (77 episodes took about 3.2 days at launch), so corrections that do not touch the manifest are picked up within that window.
 
 ## 6. Search ranking
 
