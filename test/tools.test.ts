@@ -197,6 +197,25 @@ it("does not throw when stored chapters have a missing label", async () => {
   expect(result.results.find(row => row.episode === 2)?.matching_chapters).toEqual([]);
 });
 
+it("names the missing lookup when get_episode gets a number and a slug", async () => {
+  // Both exist but differ: a real mismatch.
+  await expect(getEpisode(d1(shim), { episode: 2, slug: files[2].slug }))
+    .rejects.toThrow(new ToolInputError(
+      "The episode number and slug refer to different episodes.",
+    ));
+  // The number exists, the slug matches nothing.
+  await expect(getEpisode(d1(shim), { episode: 2, slug: "example-missing-slug" }))
+    .rejects.toThrow(new ToolInputError("No episode with slug example-missing-slug."));
+  // The slug exists, the number matches nothing.
+  await expect(getEpisode(d1(shim), { episode: 999, slug: files[0].slug }))
+    .rejects.toThrow(new ToolInputError("No episode 999. Episodes run from 1 to 77."));
+  // Neither matches: the number is reported first.
+  await expect(getEpisode(d1(shim), { episode: 999, slug: "example-missing-slug" }))
+    .rejects.toThrow(new ToolInputError("No episode 999. Episodes run from 1 to 77."));
+  // Both name the same episode: success.
+  expect((await getEpisode(d1(shim), { episode: 2, slug: files[0].slug })).episode).toBe(2);
+});
+
 it("returns episode metadata and bounded excerpt", async () => {
   const episode = await getEpisode(d1(shim), { slug: files[0].canonicalUrl });
   expect(episode).toMatchObject({
