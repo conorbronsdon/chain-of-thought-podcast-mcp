@@ -240,25 +240,23 @@ export async function getEpisode(
   const slugRow = slug === undefined ? null
     : await db.prepare("SELECT * FROM episodes WHERE slug = ?")
       .bind(slug).first<EpisodeRow>();
-  if (
-    input.episode !== undefined
-    && slug !== undefined
-    && numberRow?.episode !== slugRow?.episode
-  ) {
+  // Report the lookup that failed. A number or slug that matches nothing is a
+  // missing episode, not a mismatch between two episodes.
+  if (input.episode !== undefined && !numberRow) {
+    const max = await db.prepare("SELECT max(episode) AS n FROM episodes")
+      .first<{ n: number | null }>();
+    throw new ToolInputError(
+      `No episode ${input.episode}. Episodes run from 1 to ${max?.n ?? 0}.`,
+    );
+  }
+  if (slug !== undefined && !slugRow) {
+    throw new ToolInputError(`No episode with slug ${slug}.`);
+  }
+  if (numberRow && slugRow && numberRow.episode !== slugRow.episode) {
     throw new ToolInputError("The episode number and slug refer to different episodes.");
   }
 
-  const r = numberRow ?? slugRow;
-  if (!r) {
-    if (input.episode !== undefined) {
-      const max = await db.prepare("SELECT max(episode) AS n FROM episodes")
-        .first<{ n: number | null }>();
-      throw new ToolInputError(
-        `No episode ${input.episode}. Episodes run from 1 to ${max?.n ?? 0}.`,
-      );
-    }
-    throw new ToolInputError(`No episode with slug ${slug}.`);
-  }
+  const r = (numberRow ?? slugRow)!;
 
   return {
     episode: r.episode,
